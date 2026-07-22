@@ -12,7 +12,7 @@ run_ref() {
 
   valgrind --tool=massif \
     --massif-out-file="$out_file" \
-    Rscript -e "source('R/install_FIMS_debug'); install_fims_debug('$ref'); source('R/run_benchmark.R')"
+    Rscript -e "source('R/setup_FIMS'); install_fims_debug('$ref'); source('R/run_benchmark.R')"
 }
 
 run_ref "main" "$OUTPUT_DIR/massif_main.out"

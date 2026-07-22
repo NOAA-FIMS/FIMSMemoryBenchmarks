@@ -1,4 +1,4 @@
-source("R/install_FIMS_debug")
+source("R/setup_FIMS")
 
 run_branch_benchmark <- function(ref) {
   install_fims_debug(ref)
