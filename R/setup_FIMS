@@ -1,0 +1,20 @@
+#' Install a specific FIMS branch compiled in Debug Mode
+#'
+#' @param ref Branch name, tag, or commit hash (e.g. "main", "xptr-refactor")
+install_fims_debug <- function(ref = "main") {
+  message(sprintf("Installing NOAA-FIMS/FIMS@%s in debug mode...", ref))
+
+  # Ensure remotes is available
+  if (!requireNamespace("remotes", quietly = TRUE)) {
+    install.packages("remotes")
+  }
+
+  # Force compilation from source with user's ~/.R/Makevars applied
+  remotes::install_github(
+    repo = "NOAA-FIMS/FIMS",
+    ref = ref,
+    force = TRUE,
+    build_vignettes = FALSE,
+    INSTALL_opts = c("--no-multiarch")
+  )
+}

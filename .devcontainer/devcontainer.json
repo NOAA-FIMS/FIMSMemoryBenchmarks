@@ -1,0 +1,4 @@
+{
+  "name": "FIMS Memory Benchmarks",
+  "postCreateCommand": "bash .devcontainer/postCreate.sh"
+}
