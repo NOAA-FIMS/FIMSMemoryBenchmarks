@@ -20,7 +20,7 @@ These settings preserve symbols and frame pointers for profiler-friendly builds.
 
 ## Install FIMS in Debug Mode
 
-`R/setup_FIMS` provides:
+`R/install_FIMS_debug` provides:
 
 ```r
 install_fims_debug(ref = "main")
