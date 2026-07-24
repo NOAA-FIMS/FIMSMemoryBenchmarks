@@ -1,4 +1,6 @@
-source("R/setup_FIMS")
+source(here::here("R", "setup_FIMS.R"))
+
+
 
 run_branch_benchmark <- function(ref) {
   install_fims_debug(ref)
