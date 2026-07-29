@@ -134,7 +134,8 @@ setup_fims_model <- function(mode = c("helper", "sd_report_clear", "sd_report",
 
   if (target_level == 7) {
     message("--> Step 2: Fit model with fit_fims helper function...")
-    fit <- initialized |> fit_fims(optimize = TRUE)
+    fit <- init_parms |>
+      fit_fims(optimize = TRUE)
     clear()
     return(print("model ran without error"))
   }
@@ -157,7 +158,6 @@ setup_fims_model <- function(mode = c("helper", "sd_report_clear", "sd_report",
     obj$gr()
     return(print("model ran without error"))
   }
-
 
   message("--> Step 4: Fit the model...")
   opt <- nlminb(
