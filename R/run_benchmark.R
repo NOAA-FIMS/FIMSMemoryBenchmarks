@@ -1,32 +1,13 @@
-install_fims_debug("main")
-# Profile FIMS using jointprof
-jointprof_output <- file.path("outputs", "joint_profile.out")
-jointprof::start_profiler(jointprof_output)
-setup_fims_model()
-jointprof::stop_profiler()
-jointprof::summary_profiler(jointprof_output)
+sudo apt update && sudo apt install -y google-perftools libgoogle-perftools-dev
 
-# Profile FIMS using Rprof
-Rprof_output <- file.path("outputs", "Rprof_main.out")
-Rprof(NULL)
-Rprof(
-  filename = Rprof_output,
-  memory.profiling = TRUE
-)
-# code to profile
-setup_fims_model()
-Rprof(NULL)
-summaryRprof(
-  filename = Rprof_output, 
-  memory = "both",
-  lines = c("hide", "show", "both"),
-  index = 2, diff = TRUE, exclude = NULL,
-  basenames = 1
-)
+LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libprofiler.so \
+CPUPROFILE=/tmp/fims_cpp.prof \
+CPUPROFILE_REALTIME=1 \
+CPUPROFILE_FREQUENCY=50 \
+Rscript -e "source(here::here('R', 'setup_FIMS.R')); setup_fims_model()"
 
+# Launch interactive browser flame graph
+pprof -http=0.0.0.0:8080 /tmp/fims_cpp.prof_25712
 
-# Profile FIMS using profvis
-profvis_output <- profvis::profvis({
-  setup_fims_model()
-})
-saveRDS(profvis_output, file = "outputs/profvis_main.rds")
+# Or generate a top-functions text report in terminal
+pprof --text /tmp/fims_cpp.prof_25712
