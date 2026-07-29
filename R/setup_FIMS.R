@@ -134,18 +134,19 @@ setup_fims_model <- function(mode = c("helper", "sd_report_clear", "sd_report",
   if (target_level == 1) return()
 
   if (target_level == 7) {
-    fit <- initialized |> fit_fims(optimize = TRUE)
+    fit <- init_parms |>
+      fit_fims(optimize = TRUE)
     clear()
     return()
   }
 
-  obj <- TMB::MakeADFun(
-    data = list(),
-    parameters = init_parameters,
-    random = "re",
-    DLL = "FIMS",
-    silent = TRUE
-  )
+  # obj <- TMB::MakeADFun(
+  #   data = list(),
+  #   parameters = init_parameters,
+  #   random = "re",
+  #   DLL = "FIMS",
+  #   silent = TRUE
+  # )
 
   if (target_level == 2) return()
 
@@ -155,15 +156,15 @@ setup_fims_model <- function(mode = c("helper", "sd_report_clear", "sd_report",
     return()
   }
 
-  opt <- nlminb(
-    start = obj$par,
-    objective = obj$fn,
-    gradient = obj$gr,
-    control = list(eval.max = 10000, iter.max = 10000, trace = 0)
-  )
+  # opt <- nlminb(
+  #   start = obj$par,
+  #   objective = obj$fn,
+  #   gradient = obj$gr,
+  #   control = list(eval.max = 10000, iter.max = 10000, trace = 0)
+  # )
   if (target_level == 4) return()
 
-  sdreport <- TMB::sdreport(obj)
+  # sdreport <- TMB::sdreport(obj)
   if (target_level == 5) return()
 
   clear()
