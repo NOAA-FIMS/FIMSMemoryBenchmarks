@@ -47,3 +47,8 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# Generated benchmark and profiler artifacts
+fims.log
+outputs/*
+!outputs/.gitkeep
