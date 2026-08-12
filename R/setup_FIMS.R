@@ -41,7 +41,6 @@ setup_fims_model <- function(mode = c("helper", "sd_report_clear", "sd_report",
 
   target_level <- mode_levels[[mode]]
 
-  # Step 1: Initialize (Always runs)
   message("--> Step 1: Initializing data & parameters...")
 
   data("data_big")
@@ -131,42 +130,51 @@ setup_fims_model <- function(mode = c("helper", "sd_report_clear", "sd_report",
   init_parms <- parameters_4_model |>
     initialize_fims(data = data_4_model)
 
-  if (target_level == 1) return()
+  if (target_level == 1) return(print("model ran without error"))
 
   if (target_level == 7) {
+    message("--> Step 2: Fit model with fit_fims helper function...")
     fit <- initialized |> fit_fims(optimize = TRUE)
     clear()
-    return()
+    return(print("model ran without error"))
   }
+
+  message("--> Step 2: Create TMB tape...")
 
   obj <- TMB::MakeADFun(
     data = list(),
-    parameters = init_parameters,
+    parameters = init_parms$parameters,
     random = "re",
     DLL = "FIMS",
     silent = TRUE
   )
 
-  if (target_level == 2) return()
+  if (target_level == 2) return(print("model ran without error"))
 
   if (target_level == 3) {
+    message("--> Step 3: Run inner optimization and get gradients...")
     obj$fn()
     obj$gr()
-    return()
+    return(print("model ran without error"))
   }
 
+
+  message("--> Step 4: Fit the model...")
   opt <- nlminb(
     start = obj$par,
     objective = obj$fn,
     gradient = obj$gr,
     control = list(eval.max = 10000, iter.max = 10000, trace = 0)
   )
-  if (target_level == 4) return()
+  if (target_level == 4) return(print("model ran without error"))
 
+
+  message("--> Step 5: Call sdreport...")
   sdreport <- TMB::sdreport(obj)
-  if (target_level == 5) return()
+  if (target_level == 5) return(print("model ran without error"))
 
+  message("--> Step 5: clear memory...")
   clear()
-  if (target_level == 6) return()
+  if (target_level == 6) return(print("model ran without error"))
 
 }
