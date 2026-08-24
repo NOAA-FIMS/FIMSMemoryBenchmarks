@@ -13,6 +13,7 @@ REF_COMPARE="${REF_COMPARE:-xptr-refactor}"
 export FIMS_BENCHMARK_MODEL_SIZE="${MODEL_SIZE:-large}"
 SUMMARY_ARGS=()
 CPU_SUMMARY_ARGS=()
+VALIDATION_ARGS=()
 HOST_OS="$(uname -s)"
 
 run_ref() {
@@ -26,6 +27,11 @@ run_ref() {
   fims_version=$(Rscript -e "cat(as.character(packageVersion('FIMS')))")
 
   local ref_safe="${ref//[^A-Za-z0-9._-]/_}"
+  local validation_out="$OUTPUT_DIR/joint_validation_${ref_safe}_${fims_version}.rds"
+  echo "=== Running joint output validation -> $validation_out ==="
+  REPO_ROOT="$REPO_ROOT" VALIDATION_OUT="$validation_out" \
+    Rscript -e "source(file.path(Sys.getenv('REPO_ROOT'), 'R', 'setup_FIMS.R')); saveRDS(setup_fims_model(mode = 'validation'), Sys.getenv('VALIDATION_OUT'))"
+  VALIDATION_ARGS+=("$ref" "$validation_out")
   if [[ "$HOST_OS" == "Darwin" ]]; then
     local native_out="$OUTPUT_DIR/macos_profile_${ref_safe}_${fims_version}.txt"
     local trace_out="$OUTPUT_DIR/instruments_allocations_${ref_safe}_${fims_version}.trace"
@@ -169,6 +175,10 @@ CPU_REPORT_FILE="$OUTPUT_DIR/cpu_profile_report.md"
 python3 "$REPO_ROOT/scripts/summarize_cpu.py" \
   --platform "$HOST_OS" "${CPU_SUMMARY_ARGS[@]}" --output "$CPU_REPORT_FILE"
 
+VALIDATION_REPORT_FILE="$OUTPUT_DIR/joint_validation_report.md"
+Rscript "$REPO_ROOT/R/summarize_validation.R" \
+  "$VALIDATION_REPORT_FILE" "${VALIDATION_ARGS[@]}"
+
 if [[ "$HOST_OS" == "Darwin" ]]; then
   REPORT_FILE="$OUTPUT_DIR/macos_memory_report.md"
   python3 "$REPO_ROOT/scripts/summarize_macos.py" "${SUMMARY_ARGS[@]}" --output "$REPORT_FILE"
@@ -181,3 +191,4 @@ echo "======================================"
 echo "Memory profile outputs written to $OUTPUT_DIR"
 echo "Markdown summary: $REPORT_FILE"
 echo "CPU summary: $CPU_REPORT_FILE"
+echo "Joint validation summary: $VALIDATION_REPORT_FILE"

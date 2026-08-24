@@ -84,6 +84,9 @@ Each run generates:
   resource profiles, and `macos_memory_report.md`
 - On both platforms, native sampled CPU profiles and `cpu_profile_report.md`.
   macOS uses Instruments Time Profiler; Linux uses `perf` when installed.
+- A `joint_validation_report.md` comparison of objective values, gradients,
+  optimized parameters, convergence status, iterations, and `nlminb`
+  objective/gradient evaluation counts.
 
 Both Markdown reports include a metric-by-metric branch comparison with absolute
 and percentage deltas. When Instruments statistics are available, the macOS

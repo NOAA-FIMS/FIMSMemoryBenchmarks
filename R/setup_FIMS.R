@@ -51,7 +51,7 @@ expand_fims_years <- function(data, n_years) {
 setup_fims_model <- function(mode = c(
                                "helper", "sd_report_clear", "sd_report",
                                "opt_only", "inner", "tape_only",
-                               "initialize_only"
+                               "initialize_only", "validation"
                              ),
                              inner_duration_seconds = 0,
                              model_size = Sys.getenv(
@@ -75,7 +75,8 @@ setup_fims_model <- function(mode = c(
     "opt_only"        = 4,
     "sd_report"       = 5,
     "sd_report_clear" = 6,
-    "helper"          = 7
+    "helper"          = 7,
+    "validation"      = 8
   )
 
   library(FIMS)
@@ -263,6 +264,70 @@ setup_fims_model <- function(mode = c(
     "legacy"
   } else {
     "none"
+  }
+
+  if (target_level == 8) {
+    fixed <- get_fixed()
+    random <- get_random()
+    start <- c(fixed, random)
+    if (quadra_backend == "native") {
+      evaluate <- function(parameters) {
+        native_quadra_evaluate(
+          fixed = parameters[seq_along(fixed)],
+          random = parameters[length(fixed) + seq_along(random)]
+        )
+      }
+    } else if (quadra_backend == "legacy") {
+      evaluate <- function(parameters) {
+        EvaluateQuadraModel(
+          fixed_values = parameters[seq_along(fixed)],
+          random_values = parameters[length(fixed) + seq_along(random)]
+        )
+      }
+    } else {
+      joint <- TMB::MakeADFun(
+        data = list(),
+        parameters = init_parms$parameters,
+        DLL = "FIMS",
+        silent = TRUE
+      )
+      evaluate <- function(parameters) {
+        list(
+          objective = joint$fn(parameters),
+          gradient = joint$gr(parameters)
+        )
+      }
+    }
+    initial <- evaluate(start)
+    objective <- function(parameters) evaluate(parameters)$objective
+    gradient <- function(parameters) evaluate(parameters)$gradient
+    started <- proc.time()[["elapsed"]]
+    fit <- nlminb(
+      start = start,
+      objective = objective,
+      gradient = gradient,
+      control = list(eval.max = 2000, iter.max = 1000, trace = 0)
+    )
+    elapsed <- proc.time()[["elapsed"]] - started
+    final <- evaluate(fit$par)
+    return(list(
+      backend = if (quadra_backend == "none") "TMB" else quadra_backend,
+      model_size = model_size,
+      n_fixed = length(fixed),
+      n_random = length(random),
+      initial_parameters = start,
+      initial_objective = as.numeric(initial$objective),
+      initial_gradient = as.numeric(initial$gradient),
+      final_parameters = as.numeric(fit$par),
+      final_objective = as.numeric(final$objective),
+      final_gradient = as.numeric(final$gradient),
+      convergence = fit$convergence,
+      message = fit$message,
+      iterations = fit$iterations,
+      function_evaluations = unname(fit$evaluations[["function"]]),
+      gradient_evaluations = unname(fit$evaluations[["gradient"]]),
+      elapsed_seconds = unname(elapsed)
+    ))
   }
 
   if (quadra_backend == "native") {
