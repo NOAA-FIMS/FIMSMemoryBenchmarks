@@ -37,13 +37,19 @@ for (result in results) {
 if (length(results) == 2L) {
   first <- results[[1L]]
   second <- results[[2L]]
-  comparable <- length(first$initial_parameters) == length(second$initial_parameters)
+  second_order <- match(
+    first$canonical_parameter_names, second$canonical_parameter_names
+  )
+  comparable <- !anyNA(second_order) &&
+    length(second_order) == length(second$canonical_parameter_names)
   value <- function(expression) if (comparable) expression else NA_real_
   metrics <- c(
     "Initial objective absolute difference" = value(abs(first$initial_objective - second$initial_objective)),
-    "Initial gradient maximum absolute difference" = value(max(abs(first$initial_gradient - second$initial_gradient))),
+    "Initial parameters maximum absolute difference" = value(max(abs(first$canonical_initial_parameters - second$canonical_initial_parameters[second_order]))),
+    "Initial gradient maximum absolute difference" = value(max(abs(first$canonical_initial_gradient - second$canonical_initial_gradient[second_order]))),
     "Final objective absolute difference" = value(abs(first$final_objective - second$final_objective)),
-    "Final parameters maximum absolute difference" = value(max(abs(first$final_parameters - second$final_parameters))),
+    "Final parameters maximum absolute difference" = value(max(abs(first$canonical_final_parameters - second$canonical_final_parameters[second_order]))),
+    "Final gradient maximum absolute difference" = value(max(abs(first$canonical_final_gradient - second$canonical_final_gradient[second_order]))),
     "Iteration count difference" = abs(first$iterations - second$iterations),
     "Function evaluation count difference" = abs(first$function_evaluations - second$function_evaluations),
     "Gradient evaluation count difference" = abs(first$gradient_evaluations - second$gradient_evaluations)
@@ -54,7 +60,9 @@ if (length(results) == 2L) {
   }
   lines <- c(
     lines, "",
-    sprintf("Parameter dimensions agree: **%s**. Convergence codes agree: **%s**.",
+    "Parameter and gradient differences are calculated after aligning logical parameter names and converting `log_slope` to the natural slope scale.",
+    "",
+    sprintf("Canonical parameter sets agree: **%s**. Convergence codes agree: **%s**.",
             if (comparable) "yes" else "no",
             if (identical(first$convergence, second$convergence)) "yes" else "no")
   )

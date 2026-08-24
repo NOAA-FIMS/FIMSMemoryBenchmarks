@@ -1,0 +1,210 @@
+<?xml version="1.0"?>
+<trace-query-result>
+<node xpath='//trace-toc[1]/run[1]/tracks[1]/track[1]/details[1]/detail[1]'><row category="destroyed event" persistent-bytes="0" count-persistent="0" total-bytes="0" transient-bytes="0" count-events="0" count-transient="0" count-total="0"/>
+<row category="All Heap &amp; Anonymous VM" persistent-bytes="2586608192" count-persistent="62656" total-bytes="22380659456" transient-bytes="19794051264" count-events="2431266" count-transient="1185449" count-total="1248105"/>
+<row category="All Heap Allocations" persistent-bytes="2586034752" count-persistent="62655" total-bytes="22379119360" transient-bytes="19793084608" count-events="2431255" count-transient="1185444" count-total="1248099"/>
+<row category="All Anonymous VM" persistent-bytes="573440" count-persistent="1" total-bytes="1540096" transient-bytes="966656" count-events="11" count-transient="5" count-total="6"/>
+<row category="All VM Regions" persistent-bytes="6363906048" count-persistent="69" total-bytes="11637325824" transient-bytes="5273419776" count-events="121" count-transient="26" count-total="95"/>
+<row category="Malloc 192 Bytes" persistent-bytes="364992" count-persistent="1901" total-bytes="3055104" transient-bytes="2690112" count-events="29923" count-transient="14011" count-total="15912"/>
+<row category="Malloc 240 Bytes" persistent-bytes="195840" count-persistent="816" total-bytes="9698400" transient-bytes="9502560" count-events="80004" count-transient="39594" count-total="40410"/>
+<row category="Malloc 256 Bytes" persistent-bytes="159232" count-persistent="622" total-bytes="1481472" transient-bytes="1322240" count-events="10953" count-transient="5165" count-total="5787"/>
+<row category="Malloc 208 Bytes" persistent-bytes="192816" count-persistent="927" total-bytes="635856" transient-bytes="443040" count-events="5187" count-transient="2130" count-total="3057"/>
+<row category="Malloc 144 Bytes" persistent-bytes="8064" count-persistent="56" total-bytes="68112" transient-bytes="60048" count-events="890" count-transient="417" count-total="473"/>
+<row category="icu::CollationCacheEntry" persistent-bytes="512" count-persistent="2" total-bytes="512" transient-bytes="0" count-events="2" count-transient="0" count-total="2"/>
+<row category="Malloc 224 Bytes" persistent-bytes="125888" count-persistent="562" total-bytes="1825376" transient-bytes="1699488" count-events="15736" count-transient="7587" count-total="8149"/>
+<row category="icu::Locale" persistent-bytes="224" count-persistent="1" total-bytes="224" transient-bytes="0" count-events="1" count-transient="0" count-total="1"/>
+<row category="icu::UnicodeSet" persistent-bytes="208" count-persistent="1" total-bytes="208" transient-bytes="0" count-events="1" count-transient="0" count-total="1"/>
+<row category="Malloc 96 Bytes" persistent-bytes="10176" count-persistent="106" total-bytes="780768" transient-bytes="770592" count-events="16163" count-transient="8027" count-total="8133"/>
+<row category="Malloc 80 Bytes" persistent-bytes="12240" count-persistent="153" total-bytes="224240" transient-bytes="212000" count-events="5452" count-transient="2650" count-total="2803"/>
+<row category="icu::Normalizer2Impl" persistent-bytes="80" count-persistent="1" total-bytes="80" transient-bytes="0" count-events="1" count-transient="0" count-total="1"/>
+<row category="Malloc 128 Bytes" persistent-bytes="13440" count-persistent="105" total-bytes="97280" transient-bytes="83840" count-events="1415" count-transient="655" count-total="760"/>
+<row category="Malloc 112 Bytes" persistent-bytes="8512" count-persistent="76" total-bytes="875616" transient-bytes="867104" count-events="15560" count-transient="7742" count-total="7818"/>
+<row category="Malloc 64 Bytes" persistent-bytes="22464" count-persistent="351" total-bytes="120256" transient-bytes="97792" count-events="3407" count-transient="1528" count-total="1879"/>
+<row category="Malloc 32 Bytes" persistent-bytes="80320" count-persistent="2510" total-bytes="25213024" transient-bytes="25132704" count-events="1572390" count-transient="785397" count-total="787907"/>
+<row category="icu::SharedObject" persistent-bytes="32" count-persistent="1" total-bytes="32" transient-bytes="0" count-events="1" count-transient="0" count-total="1"/>
+<row category="Malloc 16 Bytes" persistent-bytes="17856" count-persistent="1116" total-bytes="740288" transient-bytes="722432" count-events="90445" count-transient="45152" count-total="46268"/>
+<row category="Malloc 48 Bytes" persistent-bytes="179232" count-persistent="3734" total-bytes="778944" transient-bytes="599712" count-events="28347" count-transient="12494" count-total="16228"/>
+<row category="Malloc 176 Bytes" persistent-bytes="3344" count-persistent="19" total-bytes="261184" transient-bytes="257840" count-events="2949" count-transient="1465" count-total="1484"/>
+<row category="Malloc 160 Bytes" persistent-bytes="2720" count-persistent="17" total-bytes="5901440" transient-bytes="5898720" count-events="73751" count-transient="36867" count-total="36884"/>
+<row category="icu::UnifiedCache" persistent-bytes="64" count-persistent="1" total-bytes="64" transient-bytes="0" count-events="1" count-transient="0" count-total="1"/>
+<row category="Malloc 320 Bytes" persistent-bytes="154880" count-persistent="484" total-bytes="944320" transient-bytes="789440" count-events="5418" count-transient="2467" count-total="2951"/>
+<row category="Malloc 816 Bytes" persistent-bytes="212976" count-persistent="261" total-bytes="319056" transient-bytes="106080" count-events="521" count-transient="130" count-total="391"/>
+<row category="Malloc 432 Bytes" persistent-bytes="421200" count-persistent="975" total-bytes="653184" transient-bytes="231984" count-events="2049" count-transient="537" count-total="1512"/>
+<row category="Malloc 304 Bytes" persistent-bytes="393072" count-persistent="1293" total-bytes="6549072" transient-bytes="6156000" count-events="41793" count-transient="20250" count-total="21543"/>
+<row category="Malloc 576 Bytes" persistent-bytes="66816" count-persistent="116" total-bytes="262656" transient-bytes="195840" count-events="796" count-transient="340" count-total="456"/>
+<row category="Malloc 448 Bytes" persistent-bytes="113344" count-persistent="253" total-bytes="241920" transient-bytes="128576" count-events="827" count-transient="287" count-total="540"/>
+<row category="Malloc 672 Bytes" persistent-bytes="168000" count-persistent="250" total-bytes="368256" transient-bytes="200256" count-events="846" count-transient="298" count-total="548"/>
+<row category="Malloc 288 Bytes" persistent-bytes="1177632" count-persistent="4089" total-bytes="29259936" transient-bytes="28082304" count-events="199105" count-transient="97508" count-total="101597"/>
+<row category="Malloc 368 Bytes" persistent-bytes="147200" count-persistent="400" total-bytes="1006112" transient-bytes="858912" count-events="5068" count-transient="2334" count-total="2734"/>
+<row category="Malloc 608 Bytes" persistent-bytes="131328" count-persistent="216" total-bytes="724128" transient-bytes="592800" count-events="2166" count-transient="975" count-total="1191"/>
+<row category="Malloc 336 Bytes" persistent-bytes="164640" count-persistent="490" total-bytes="939456" transient-bytes="774816" count-events="5102" count-transient="2306" count-total="2796"/>
+<row category="Malloc 720 Bytes" persistent-bytes="152640" count-persistent="212" total-bytes="264240" transient-bytes="111600" count-events="522" count-transient="155" count-total="367"/>
+<row category="Malloc 384 Bytes" persistent-bytes="164736" count-persistent="429" total-bytes="380928" transient-bytes="216192" count-events="1555" count-transient="563" count-total="992"/>
+<row category="Malloc 272 Bytes" persistent-bytes="220048" count-persistent="809" total-bytes="452064" transient-bytes="232016" count-events="2515" count-transient="853" count-total="1662"/>
+<row category="Malloc 704 Bytes" persistent-bytes="147136" count-persistent="209" total-bytes="239360" transient-bytes="92224" count-events="471" count-transient="131" count-total="340"/>
+<row category="Malloc 464 Bytes" persistent-bytes="69136" count-persistent="149" total-bytes="277008" transient-bytes="207872" count-events="1045" count-transient="448" count-total="597"/>
+<row category="Malloc 624 Bytes" persistent-bytes="92352" count-persistent="148" total-bytes="215904" transient-bytes="123552" count-events="544" count-transient="198" count-total="346"/>
+<row category="Malloc 496 Bytes" persistent-bytes="100688" count-persistent="203" total-bytes="835264" transient-bytes="734576" count-events="3165" count-transient="1481" count-total="1684"/>
+<row category="Malloc 736 Bytes" persistent-bytes="57408" count-persistent="78" total-bytes="163392" transient-bytes="105984" count-events="366" count-transient="144" count-total="222"/>
+<row category="Malloc 400 Bytes" persistent-bytes="94800" count-persistent="237" total-bytes="4590000" transient-bytes="4495200" count-events="22712" count-transient="11238" count-total="11475"/>
+<row category="Malloc 656 Bytes" persistent-bytes="122672" count-persistent="187" total-bytes="272240" transient-bytes="149568" count-events="643" count-transient="228" count-total="415"/>
+<row category="Malloc 800 Bytes" persistent-bytes="58400" count-persistent="73" total-bytes="1021600" transient-bytes="963200" count-events="2478" count-transient="1204" count-total="1277"/>
+<row category="Malloc 864 Bytes" persistent-bytes="44064" count-persistent="51" total-bytes="129600" transient-bytes="85536" count-events="249" count-transient="99" count-total="150"/>
+<row category="Malloc 560 Bytes" persistent-bytes="85120" count-persistent="152" total-bytes="782880" transient-bytes="697760" count-events="2644" count-transient="1246" count-total="1398"/>
+<row category="Malloc 544 Bytes" persistent-bytes="375360" count-persistent="690" total-bytes="868224" transient-bytes="492864" count-events="2502" count-transient="906" count-total="1596"/>
+<row category="Malloc 352 Bytes" persistent-bytes="96096" count-persistent="273" total-bytes="583616" transient-bytes="487520" count-events="3043" count-transient="1385" count-total="1658"/>
+<row category="Malloc 688 Bytes" persistent-bytes="91504" count-persistent="133" total-bytes="209840" transient-bytes="118336" count-events="477" count-transient="172" count-total="305"/>
+<row category="Malloc 528 Bytes" persistent-bytes="201168" count-persistent="381" total-bytes="430848" transient-bytes="229680" count-events="1251" count-transient="435" count-total="816"/>
+<row category="Malloc 752 Bytes" persistent-bytes="73696" count-persistent="98" total-bytes="197776" transient-bytes="124080" count-events="428" count-transient="165" count-total="263"/>
+<row category="Malloc 416 Bytes" persistent-bytes="110240" count-persistent="265" total-bytes="978016" transient-bytes="867776" count-events="4437" count-transient="2086" count-total="2351"/>
+<row category="Malloc 976 Bytes" persistent-bytes="41968" count-persistent="43" total-bytes="232288" transient-bytes="190320" count-events="433" count-transient="195" count-total="238"/>
+<row category="Malloc 512 Bytes" persistent-bytes="132608" count-persistent="259" total-bytes="1154048" transient-bytes="1021440" count-events="4251" count-transient="1995" count-total="2254"/>
+<row category="Malloc 944 Bytes" persistent-bytes="63248" count-persistent="67" total-bytes="209568" transient-bytes="146320" count-events="377" count-transient="155" count-total="222"/>
+<row category="Malloc 784 Bytes" persistent-bytes="68992" count-persistent="88" total-bytes="441392" transient-bytes="372400" count-events="1043" count-transient="475" count-total="563"/>
+<row category="Malloc 480 Bytes" persistent-bytes="98400" count-persistent="205" total-bytes="344640" transient-bytes="246240" count-events="1207" count-transient="513" count-total="718"/>
+<row category="Malloc 992 Bytes" persistent-bytes="110112" count-persistent="111" total-bytes="261888" transient-bytes="151776" count-events="417" count-transient="153" count-total="264"/>
+<row category="Malloc 928 Bytes" persistent-bytes="28768" count-persistent="31" total-bytes="87232" transient-bytes="58464" count-events="157" count-transient="63" count-total="94"/>
+<row category="Malloc 880 Bytes" persistent-bytes="52800" count-persistent="60" total-bytes="776160" transient-bytes="723360" count-events="1704" count-transient="822" count-total="882"/>
+<row category="Malloc 592 Bytes" persistent-bytes="52096" count-persistent="88" total-bytes="201280" transient-bytes="149184" count-events="592" count-transient="252" count-total="340"/>
+<row category="Malloc 640 Bytes" persistent-bytes="56320" count-persistent="88" total-bytes="154240" transient-bytes="97920" count-events="394" count-transient="153" count-total="241"/>
+<row category="Malloc 768 Bytes" persistent-bytes="119040" count-persistent="155" total-bytes="357120" transient-bytes="238080" count-events="775" count-transient="310" count-total="465"/>
+<row category="Malloc 832 Bytes" persistent-bytes="57408" count-persistent="69" total-bytes="127296" transient-bytes="69888" count-events="237" count-transient="84" count-total="153"/>
+<row category="Malloc 848 Bytes" persistent-bytes="72080" count-persistent="85" total-bytes="348528" transient-bytes="276448" count-events="737" count-transient="326" count-total="411"/>
+<row category="Malloc 896 Bytes" persistent-bytes="57344" count-persistent="64" total-bytes="154112" transient-bytes="96768" count-events="280" count-transient="108" count-total="172"/>
+<row category="Malloc 912 Bytes" persistent-bytes="55632" count-persistent="61" total-bytes="172368" transient-bytes="116736" count-events="317" count-transient="128" count-total="189"/>
+<row category="Malloc 960 Bytes" persistent-bytes="37440" count-persistent="39" total-bytes="381120" transient-bytes="343680" count-events="755" count-transient="358" count-total="397"/>
+<row category="Malloc 1,008 Bytes" persistent-bytes="228816" count-persistent="227" total-bytes="1018080" transient-bytes="789264" count-events="1793" count-transient="783" count-total="1010"/>
+<row category="icu::CollationTailoring" persistent-bytes="400" count-persistent="1" total-bytes="400" transient-bytes="0" count-events="1" count-transient="0" count-total="1"/>
+<row category="icu::CollationSettings" persistent-bytes="864" count-persistent="1" total-bytes="864" transient-bytes="0" count-events="1" count-transient="0" count-total="1"/>
+<row category="icu::RuleBasedCollator" persistent-bytes="272" count-persistent="1" total-bytes="272" transient-bytes="0" count-events="1" count-transient="0" count-total="1"/>
+<row category="Malloc 1.50 KiB" persistent-bytes="2124288" count-persistent="1383" total-bytes="18796032" transient-bytes="16671744" count-events="23092" count-transient="10854" count-total="12237"/>
+<row category="Malloc 8.00 KiB" persistent-bytes="242622464" count-persistent="29617" total-bytes="374833152" transient-bytes="132210688" count-events="61895" count-transient="16139" count-total="45756"/>
+<row category="Malloc 13.50 KiB" persistent-bytes="96768" count-persistent="7" total-bytes="539136" transient-bytes="442368" count-events="71" count-transient="32" count-total="39"/>
+<row category="Malloc 4.50 KiB" persistent-bytes="235008" count-persistent="51" total-bytes="1506816" transient-bytes="1271808" count-events="603" count-transient="276" count-total="327"/>
+<row category="Malloc 2.00 KiB" persistent-bytes="1316864" count-persistent="643" total-bytes="8663040" transient-bytes="7346176" count-events="7814" count-transient="3587" count-total="4230"/>
+<row category="Malloc 3.00 KiB" persistent-bytes="1050624" count-persistent="342" total-bytes="7047168" transient-bytes="5996544" count-events="4246" count-transient="1952" count-total="2294"/>
+<row category="Malloc 9.50 KiB" persistent-bytes="58368" count-persistent="6" total-bytes="710144" transient-bytes="651776" count-events="140" count-transient="67" count-total="73"/>
+<row category="Malloc 5.00 KiB" persistent-bytes="358400" count-persistent="70" total-bytes="1551360" transient-bytes="1192960" count-events="536" count-transient="233" count-total="303"/>
+<row category="Malloc 4.00 KiB" persistent-bytes="331776" count-persistent="81" total-bytes="20213760" transient-bytes="19881984" count-events="9789" count-transient="4854" count-total="4935"/>
+<row category="Malloc 16.50 KiB" persistent-bytes="0" count-persistent="0" total-bytes="4663296" transient-bytes="4663296" count-events="552" count-transient="276" count-total="276"/>
+<row category="Malloc 2.50 KiB" persistent-bytes="998400" count-persistent="390" total-bytes="3619840" transient-bytes="2621440" count-events="2437" count-transient="1024" count-total="1414"/>
+<row category="Malloc 3.50 KiB" persistent-bytes="623616" count-persistent="174" total-bytes="2609152" transient-bytes="1985536" count-events="1280" count-transient="554" count-total="728"/>
+<row category="Malloc 11.00 KiB" persistent-bytes="78848" count-persistent="7" total-bytes="2072576" transient-bytes="1993728" count-events="361" count-transient="177" count-total="184"/>
+<row category="Malloc 6.00 KiB" persistent-bytes="829440" count-persistent="135" total-bytes="3170304" transient-bytes="2340864" count-events="897" count-transient="381" count-total="516"/>
+<row category="Malloc 8.50 KiB" persistent-bytes="52224" count-persistent="6" total-bytes="1000960" transient-bytes="948736" count-events="224" count-transient="109" count-total="115"/>
+<row category="Malloc 7.50 KiB" persistent-bytes="99840" count-persistent="13" total-bytes="1612800" transient-bytes="1512960" count-events="407" count-transient="197" count-total="210"/>
+<row category="Malloc 7.00 KiB" persistent-bytes="114688" count-persistent="16" total-bytes="2444288" transient-bytes="2329600" count-events="666" count-transient="325" count-total="341"/>
+<row category="Malloc 16.00 KiB" persistent-bytes="0" count-persistent="0" total-bytes="1081344" transient-bytes="1081344" count-events="132" count-transient="66" count-total="66"/>
+<row category="Malloc 10.00 KiB" persistent-bytes="286720" count-persistent="28" total-bytes="1013760" transient-bytes="727040" count-events="170" count-transient="71" count-total="99"/>
+<row category="Malloc 13.00 KiB" persistent-bytes="585728" count-persistent="44" total-bytes="1530880" transient-bytes="945152" count-events="186" count-transient="71" count-total="115"/>
+<row category="Malloc 1.00 KiB" persistent-bytes="653312" count-persistent="638" total-bytes="11038720" transient-bytes="10385408" count-events="20922" count-transient="10142" count-total="10780"/>
+<row category="Malloc 10.50 KiB" persistent-bytes="354816" count-persistent="33" total-bytes="1268736" transient-bytes="913920" count-events="203" count-transient="85" count-total="118"/>
+<row category="Malloc 5.50 KiB" persistent-bytes="591360" count-persistent="105" total-bytes="8543744" transient-bytes="7952384" count-events="2929" count-transient="1412" count-total="1517"/>
+<row category="Malloc 9.00 KiB" persistent-bytes="119808" count-persistent="13" total-bytes="976896" transient-bytes="857088" count-events="199" count-transient="93" count-total="106"/>
+<row category="Malloc 6.50 KiB" persistent-bytes="299520" count-persistent="45" total-bytes="1411072" transient-bytes="1111552" count-events="379" count-transient="167" count-total="212"/>
+<row category="Malloc 17.00 KiB" persistent-bytes="34816" count-persistent="2" total-bytes="1845248" transient-bytes="1810432" count-events="210" count-transient="104" count-total="106"/>
+<row category="Malloc 25.50 KiB" persistent-bytes="809472" count-persistent="31" total-bytes="1096704" transient-bytes="287232" count-events="53" count-transient="11" count-total="42"/>
+<row category="Malloc 26.00 KiB" persistent-bytes="26624" count-persistent="1" total-bytes="186368" transient-bytes="159744" count-events="13" count-transient="6" count-total="7"/>
+<row category="Malloc 14.50 KiB" persistent-bytes="193024" count-persistent="13" total-bytes="801792" transient-bytes="608768" count-events="95" count-transient="41" count-total="54"/>
+<row category="@autoreleasepool content" persistent-bytes="4096" count-persistent="1" total-bytes="4096" transient-bytes="0" count-events="1" count-transient="0" count-total="1"/>
+<row category="Malloc 11.50 KiB" persistent-bytes="694784" count-persistent="59" total-bytes="8184320" transient-bytes="7489536" count-events="1331" count-transient="636" count-total="695"/>
+<row category="Malloc 12.00 KiB" persistent-bytes="61440" count-persistent="5" total-bytes="761856" transient-bytes="700416" count-events="119" count-transient="57" count-total="62"/>
+<row category="Malloc 64.00 KiB" persistent-bytes="4653056" count-persistent="71" total-bytes="70516736" transient-bytes="65863680" count-events="2081" count-transient="1005" count-total="1076"/>
+<row category="Malloc 96.00 KiB" persistent-bytes="1867776" count-persistent="19" total-bytes="19070976" transient-bytes="17203200" count-events="369" count-transient="175" count-total="194"/>
+<row category="Malloc 1.31 MiB" persistent-bytes="1376256" count-persistent="1" total-bytes="1376256" transient-bytes="0" count-events="1" count-transient="0" count-total="1"/>
+<row category="Malloc 960.00 KiB" persistent-bytes="983040" count-persistent="1" total-bytes="983040" transient-bytes="0" count-events="1" count-transient="0" count-total="1"/>
+<row category="Malloc 128.00 KiB" persistent-bytes="393216" count-persistent="3" total-bytes="9306112" transient-bytes="8912896" count-events="138" count-transient="68" count-total="71"/>
+<row category="Malloc 416.00 KiB" persistent-bytes="851968" count-persistent="2" total-bytes="851968" transient-bytes="0" count-events="2" count-transient="0" count-total="2"/>
+<row category="Malloc 4.59 MiB" persistent-bytes="4816896" count-persistent="1" total-bytes="4816896" transient-bytes="0" count-events="1" count-transient="0" count-total="1"/>
+<row category="Malloc 544.00 KiB" persistent-bytes="557056" count-persistent="1" total-bytes="2785280" transient-bytes="2228224" count-events="9" count-transient="4" count-total="5"/>
+<row category="Malloc 256.00 KiB" persistent-bytes="524288" count-persistent="2" total-bytes="8388608" transient-bytes="7864320" count-events="62" count-transient="30" count-total="32"/>
+<row category="Malloc 1.06 MiB" persistent-bytes="1114112" count-persistent="1" total-bytes="1114112" transient-bytes="0" count-events="1" count-transient="0" count-total="1"/>
+<row category="Malloc 352.00 KiB" persistent-bytes="360448" count-persistent="1" total-bytes="3964928" transient-bytes="3604480" count-events="21" count-transient="10" count-total="11"/>
+<row category="Malloc 1.59 MiB" persistent-bytes="1671168" count-persistent="1" total-bytes="6684672" transient-bytes="5013504" count-events="7" count-transient="3" count-total="4"/>
+<row category="Malloc 224.00 KiB" persistent-bytes="688128" count-persistent="3" total-bytes="3211264" transient-bytes="2523136" count-events="25" count-transient="11" count-total="14"/>
+<row category="VM: Allocation 96.00 KiB" persistent-bytes="0" count-persistent="0" total-bytes="393216" transient-bytes="393216" count-events="8" count-transient="4" count-total="4"/>
+<row category="VM: MALLOC_SMALL" persistent-bytes="243269632" count-persistent="29" total-bytes="243269632" transient-bytes="0" count-events="29" count-transient="0" count-total="29"/>
+<row category="VM: MALLOC_MEDIUM" persistent-bytes="402653184" count-persistent="3" total-bytes="2818572288" transient-bytes="2415919104" count-events="39" count-transient="18" count-total="21"/>
+<row category="Malloc 14.00 KiB" persistent-bytes="14336" count-persistent="1" total-bytes="917504" transient-bytes="903168" count-events="127" count-transient="63" count-total="64"/>
+<row category="VM: MALLOC_TINY" persistent-bytes="8388608" count-persistent="8" total-bytes="8388608" transient-bytes="0" count-events="8" count-transient="0" count-total="8"/>
+<row category="Malloc 1.22 MiB" persistent-bytes="0" count-persistent="0" total-bytes="7667712" transient-bytes="7667712" count-events="12" count-transient="6" count-total="6"/>
+<row category="Malloc 12.50 KiB" persistent-bytes="0" count-persistent="0" total-bytes="755200" transient-bytes="755200" count-events="118" count-transient="59" count-total="59"/>
+<row category="Malloc 18.50 KiB" persistent-bytes="18944" count-persistent="1" total-bytes="776704" transient-bytes="757760" count-events="81" count-transient="40" count-total="41"/>
+<row category="Malloc 22.00 KiB" persistent-bytes="1261568" count-persistent="56" total-bytes="7366656" transient-bytes="6105088" count-events="598" count-transient="271" count-total="327"/>
+<row category="Malloc 17.50 KiB" persistent-bytes="53760" count-persistent="3" total-bytes="609280" transient-bytes="555520" count-events="65" count-transient="31" count-total="34"/>
+<row category="Malloc 32.00 KiB" persistent-bytes="0" count-persistent="0" total-bytes="7307264" transient-bytes="7307264" count-events="446" count-transient="223" count-total="223"/>
+<row category="Malloc 28.00 KiB" persistent-bytes="1060864" count-persistent="37" total-bytes="3153920" transient-bytes="2093056" count-events="183" count-transient="73" count-total="110"/>
+<row category="Malloc 576.00 KiB" persistent-bytes="589824" count-persistent="1" total-bytes="589824" transient-bytes="0" count-events="1" count-transient="0" count-total="1"/>
+<row category="Malloc 640.00 KiB" persistent-bytes="1310720" count-persistent="2" total-bytes="1310720" transient-bytes="0" count-events="2" count-transient="0" count-total="2"/>
+<row category="Malloc 23.00 KiB" persistent-bytes="0" count-persistent="0" total-bytes="1483776" transient-bytes="1483776" count-events="126" count-transient="63" count-total="63"/>
+<row category="Malloc 2.72 MiB" persistent-bytes="2850816" count-persistent="1" total-bytes="2850816" transient-bytes="0" count-events="1" count-transient="0" count-total="1"/>
+<row category="Malloc 15.50 KiB" persistent-bytes="15872" count-persistent="1" total-bytes="603136" transient-bytes="587264" count-events="75" count-transient="37" count-total="38"/>
+<row category="Malloc 29.00 KiB" persistent-bytes="0" count-persistent="0" total-bytes="237568" transient-bytes="237568" count-events="16" count-transient="8" count-total="8"/>
+<row category="Malloc 31.50 KiB" persistent-bytes="0" count-persistent="0" total-bytes="129024" transient-bytes="129024" count-events="8" count-transient="4" count-total="4"/>
+<row category="Malloc 22.50 KiB" persistent-bytes="0" count-persistent="0" total-bytes="4792320" transient-bytes="4792320" count-events="416" count-transient="208" count-total="208"/>
+<row category="Malloc 18.00 KiB" persistent-bytes="36864" count-persistent="2" total-bytes="479232" transient-bytes="442368" count-events="50" count-transient="24" count-total="26"/>
+<row category="Malloc 19.50 KiB" persistent-bytes="0" count-persistent="0" total-bytes="359424" transient-bytes="359424" count-events="36" count-transient="18" count-total="18"/>
+<row category="Malloc 29.50 KiB" persistent-bytes="0" count-persistent="0" total-bytes="1087488" transient-bytes="1087488" count-events="72" count-transient="36" count-total="36"/>
+<row category="Malloc 320.00 KiB" persistent-bytes="327680" count-persistent="1" total-bytes="983040" transient-bytes="655360" count-events="5" count-transient="2" count-total="3"/>
+<row category="Malloc 27.00 KiB" persistent-bytes="552960" count-persistent="20" total-bytes="829440" transient-bytes="276480" count-events="40" count-transient="10" count-total="30"/>
+<row category="Malloc 26.50 KiB" persistent-bytes="0" count-persistent="0" total-bytes="461312" transient-bytes="461312" count-events="34" count-transient="17" count-total="17"/>
+<row category="Malloc 15.00 KiB" persistent-bytes="46080" count-persistent="3" total-bytes="1090560" transient-bytes="1044480" count-events="139" count-transient="68" count-total="71"/>
+<row category="Malloc 21.00 KiB" persistent-bytes="0" count-persistent="0" total-bytes="344064" transient-bytes="344064" count-events="32" count-transient="16" count-total="16"/>
+<row category="Malloc 20.00 KiB" persistent-bytes="0" count-persistent="0" total-bytes="860160" transient-bytes="860160" count-events="84" count-transient="42" count-total="42"/>
+<row category="Malloc 864.00 KiB" persistent-bytes="0" count-persistent="0" total-bytes="6193152" transient-bytes="6193152" count-events="14" count-transient="7" count-total="7"/>
+<row category="Malloc 24.50 KiB" persistent-bytes="0" count-persistent="0" total-bytes="150528" transient-bytes="150528" count-events="12" count-transient="6" count-total="6"/>
+<row category="Malloc 160.00 KiB" persistent-bytes="0" count-persistent="0" total-bytes="3932160" transient-bytes="3932160" count-events="48" count-transient="24" count-total="24"/>
+<row category="Malloc 192.00 KiB" persistent-bytes="393216" count-persistent="2" total-bytes="1966080" transient-bytes="1572864" count-events="18" count-transient="8" count-total="10"/>
+<row category="Malloc 448.00 KiB" persistent-bytes="917504" count-persistent="2" total-bytes="5505024" transient-bytes="4587520" count-events="22" count-transient="10" count-total="12"/>
+<row category="Malloc 19.00 KiB" persistent-bytes="0" count-persistent="0" total-bytes="778240" transient-bytes="778240" count-events="80" count-transient="40" count-total="40"/>
+<row category="Malloc 1.16 MiB" persistent-bytes="0" count-persistent="0" total-bytes="2424832" transient-bytes="2424832" count-events="4" count-transient="2" count-total="2"/>
+<row category="Malloc 30.00 KiB" persistent-bytes="0" count-persistent="0" total-bytes="245760" transient-bytes="245760" count-events="16" count-transient="8" count-total="8"/>
+<row category="Malloc 21.50 KiB" persistent-bytes="0" count-persistent="0" total-bytes="572416" transient-bytes="572416" count-events="52" count-transient="26" count-total="26"/>
+<row category="Malloc 480.00 KiB" persistent-bytes="0" count-persistent="0" total-bytes="3932160" transient-bytes="3932160" count-events="16" count-transient="8" count-total="8"/>
+<row category="Malloc 31.00 KiB" persistent-bytes="0" count-persistent="0" total-bytes="444416" transient-bytes="444416" count-events="28" count-transient="14" count-total="14"/>
+<row category="Malloc 512.00 KiB" persistent-bytes="0" count-persistent="0" total-bytes="16777216" transient-bytes="16777216" count-events="64" count-transient="32" count-total="32"/>
+<row category="Malloc 27.50 KiB" persistent-bytes="0" count-persistent="0" total-bytes="225280" transient-bytes="225280" count-events="16" count-transient="8" count-total="8"/>
+<row category="Malloc 23.50 KiB" persistent-bytes="48128" count-persistent="2" total-bytes="770048" transient-bytes="721920" count-events="62" count-transient="30" count-total="32"/>
+<row category="Malloc 28.50 KiB" persistent-bytes="116736" count-persistent="4" total-bytes="233472" transient-bytes="116736" count-events="12" count-transient="4" count-total="8"/>
+<row category="Malloc 672.00 KiB" persistent-bytes="688128" count-persistent="1" total-bytes="688128" transient-bytes="0" count-events="1" count-transient="0" count-total="1"/>
+<row category="Malloc 608.00 KiB" persistent-bytes="622592" count-persistent="1" total-bytes="622592" transient-bytes="0" count-events="1" count-transient="0" count-total="1"/>
+<row category="VM: Stack" persistent-bytes="573440" count-persistent="1" total-bytes="1146880" transient-bytes="573440" count-events="3" count-transient="1" count-total="2"/>
+<row category="Malloc 832.00 KiB" persistent-bytes="851968" count-persistent="1" total-bytes="851968" transient-bytes="0" count-events="1" count-transient="0" count-total="1"/>
+<row category="Malloc 2.03 MiB" persistent-bytes="2129920" count-persistent="1" total-bytes="2129920" transient-bytes="0" count-events="1" count-transient="0" count-total="1"/>
+<row category="Malloc 30.50 KiB" persistent-bytes="0" count-persistent="0" total-bytes="31232" transient-bytes="31232" count-events="2" count-transient="1" count-total="1"/>
+<row category="Malloc 24.00 KiB" persistent-bytes="0" count-persistent="0" total-bytes="221184" transient-bytes="221184" count-events="18" count-transient="9" count-total="9"/>
+<row category="Malloc 384.00 KiB" persistent-bytes="0" count-persistent="0" total-bytes="786432" transient-bytes="786432" count-events="4" count-transient="2" count-total="2"/>
+<row category="Malloc 25.00 KiB" persistent-bytes="0" count-persistent="0" total-bytes="358400" transient-bytes="358400" count-events="28" count-transient="14" count-total="14"/>
+<row category="Malloc 928.00 KiB" persistent-bytes="0" count-persistent="0" total-bytes="3801088" transient-bytes="3801088" count-events="8" count-transient="4" count-total="4"/>
+<row category="Malloc 20.50 KiB" persistent-bytes="0" count-persistent="0" total-bytes="41984" transient-bytes="41984" count-events="4" count-transient="2" count-total="2"/>
+<row category="Malloc 288.00 KiB" persistent-bytes="884736" count-persistent="3" total-bytes="884736" transient-bytes="0" count-events="3" count-transient="0" count-total="3"/>
+<row category="VM: MALLOC metadata" persistent-bytes="16384" count-persistent="1" total-bytes="16384" transient-bytes="0" count-events="1" count-transient="0" count-total="1"/>
+<row category="Malloc 1.00 MiB" persistent-bytes="0" count-persistent="0" total-bytes="27262976" transient-bytes="27262976" count-events="52" count-transient="26" count-total="26"/>
+<row category="Malloc 2.00 MiB" persistent-bytes="0" count-persistent="0" total-bytes="54525952" transient-bytes="54525952" count-events="52" count-transient="26" count-total="26"/>
+<row category="Malloc 4.00 MiB" persistent-bytes="8388608" count-persistent="2" total-bytes="96468992" transient-bytes="88080384" count-events="44" count-transient="21" count-total="23"/>
+<row category="Malloc 8.00 MiB" persistent-bytes="8388608" count-persistent="1" total-bytes="150994944" transient-bytes="142606336" count-events="35" count-transient="17" count-total="18"/>
+<row category="Malloc 5.84 MiB" persistent-bytes="0" count-persistent="0" total-bytes="79659008" transient-bytes="79659008" count-events="26" count-transient="13" count-total="13"/>
+<row category="Malloc 2.94 MiB" persistent-bytes="0" count-persistent="0" total-bytes="9240576" transient-bytes="9240576" count-events="6" count-transient="3" count-total="3"/>
+<row category="VM: MALLOC_LARGE" persistent-bytes="5709004800" count-persistent="27" total-bytes="8565538816" transient-bytes="2856534016" count-events="33" count-transient="3" count-total="30"/>
+<row category="Malloc 16.00 MiB" persistent-bytes="0" count-persistent="0" total-bytes="167772160" transient-bytes="167772160" count-events="20" count-transient="10" count-total="10"/>
+<row category="Malloc 1.44 MiB" persistent-bytes="6029312" count-persistent="4" total-bytes="12058624" transient-bytes="6029312" count-events="12" count-transient="4" count-total="8"/>
+<row category="Malloc 2.75 MiB" persistent-bytes="2883584" count-persistent="1" total-bytes="5767168" transient-bytes="2883584" count-events="3" count-transient="1" count-total="2"/>
+<row category="Malloc 2.88 MiB" persistent-bytes="0" count-persistent="0" total-bytes="21102592" transient-bytes="21102592" count-events="14" count-transient="7" count-total="7"/>
+<row category="Malloc 3.16 MiB" persistent-bytes="0" count-persistent="0" total-bytes="43024384" transient-bytes="43024384" count-events="26" count-transient="13" count-total="13"/>
+<row category="Malloc 5.88 MiB" persistent-bytes="0" count-persistent="0" total-bytes="6160384" transient-bytes="6160384" count-events="2" count-transient="1" count-total="1"/>
+<row category="Malloc 2.69 MiB" persistent-bytes="8454144" count-persistent="3" total-bytes="56360960" transient-bytes="47906816" count-events="37" count-transient="17" count-total="20"/>
+<row category="Malloc 5.28 MiB" persistent-bytes="5537792" count-persistent="1" total-bytes="5537792" transient-bytes="0" count-events="1" count-transient="0" count-total="1"/>
+<row category="Malloc 1.34 MiB" persistent-bytes="0" count-persistent="0" total-bytes="4227072" transient-bytes="4227072" count-events="6" count-transient="3" count-total="3"/>
+<row category="Malloc 3.88 MiB" persistent-bytes="0" count-persistent="0" total-bytes="4063232" transient-bytes="4063232" count-events="2" count-transient="1" count-total="1"/>
+<row category="Malloc 5.34 MiB" persistent-bytes="0" count-persistent="0" total-bytes="39223296" transient-bytes="39223296" count-events="14" count-transient="7" count-total="7"/>
+<row category="Malloc 32.00 MiB" persistent-bytes="0" count-persistent="0" total-bytes="301989888" transient-bytes="301989888" count-events="18" count-transient="9" count-total="9"/>
+<row category="Malloc 64.00 MiB" persistent-bytes="0" count-persistent="0" total-bytes="603979776" transient-bytes="603979776" count-events="18" count-transient="9" count-total="9"/>
+<row category="Malloc 128.00 MiB" persistent-bytes="0" count-persistent="0" total-bytes="1207959552" transient-bytes="1207959552" count-events="18" count-transient="9" count-total="9"/>
+<row category="Malloc 256.00 MiB" persistent-bytes="268435456" count-persistent="1" total-bytes="3758096384" transient-bytes="3489660928" count-events="27" count-transient="13" count-total="14"/>
+<row category="Malloc 512.00 MiB" persistent-bytes="1073741824" count-persistent="2" total-bytes="4831838208" transient-bytes="3758096384" count-events="16" count-transient="7" count-total="9"/>
+<row category="Malloc 1.00 GiB" persistent-bytes="0" count-persistent="0" total-bytes="2147483648" transient-bytes="2147483648" count-events="4" count-transient="2" count-total="2"/>
+<row category="Malloc 340.67 MiB" persistent-bytes="714440704" count-persistent="2" total-bytes="6429966336" transient-bytes="5715525632" count-events="34" count-transient="16" count-total="18"/>
+<row category="Malloc 676.20 MiB" persistent-bytes="0" count-persistent="0" total-bytes="709050368" transient-bytes="709050368" count-events="2" count-transient="1" count-total="1"/>
+<row category="Malloc 182.28 MiB" persistent-bytes="191135744" count-persistent="1" total-bytes="382271488" transient-bytes="191135744" count-events="3" count-transient="1" count-total="2"/>
+<row category="Malloc 363.55 MiB" persistent-bytes="0" count-persistent="0" total-bytes="381206528" transient-bytes="381206528" count-events="2" count-transient="1" count-total="1"/>
+</node></trace-query-result>

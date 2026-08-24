@@ -87,6 +87,8 @@ Each run generates:
 - A `joint_validation_report.md` comparison of objective values, gradients,
   optimized parameters, convergence status, iterations, and `nlminb`
   objective/gradient evaluation counts.
+- A combined `final_report.md` with the model description, side-by-side
+  parameter estimates, joint validation, CPU profile, and memory profile.
 
 Both Markdown reports include a metric-by-metric branch comparison with absolute
 and percentage deltas. When Instruments statistics are available, the macOS

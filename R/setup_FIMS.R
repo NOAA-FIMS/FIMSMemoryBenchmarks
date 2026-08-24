@@ -270,6 +270,36 @@ setup_fims_model <- function(mode = c(
     fixed <- get_fixed()
     random <- get_random()
     start <- c(fixed, random)
+    fixed_name_function <- get0(
+      "native_get_parameter_names", envir = fims_namespace,
+      mode = "function", inherits = FALSE
+    )
+    fixed_names <- if (is.function(fixed_name_function)) {
+      fixed_name_function()
+    } else {
+      named_fixed <- get0(
+        "get_parameter_names", envir = fims_namespace,
+        mode = "function", inherits = FALSE
+      )(fixed)
+      names(named_fixed)
+    }
+    random_name_function <- get0(
+      "get_random_names", envir = fims_namespace,
+      mode = "function", inherits = FALSE
+    )
+    random_names <- names(random_name_function(random))
+    if (length(fixed_names) != length(fixed)) {
+      fixed_names <- paste0("fixed_effect_", seq_along(fixed))
+    }
+    if (length(random_names) != length(random)) {
+      random_names <- paste0("random_effect_", seq_along(random))
+    }
+    if (length(random) == model_years - 1L &&
+        all(grepl("^random_effect_", random_names))) {
+      random_names <- paste0(
+        "Recruitment.1.log_devs.", seq.int(2L, model_years)
+      )
+    }
     if (quadra_backend == "native") {
       evaluate <- function(parameters) {
         native_quadra_evaluate(
@@ -310,11 +340,47 @@ setup_fims_model <- function(mode = c(
     )
     elapsed <- proc.time()[["elapsed"]] - started
     final <- evaluate(fit$par)
+    raw_names <- c(fixed_names, random_names)
+    canonical_base <- sub("\\.[0-9]+$", "", raw_names)
+    canonical_base <- sub("\\.log_slope$", ".slope", canonical_base)
+    canonical_base <- sub(
+      "^dnorm\\.[0-9]+\\.log_sd$", "Recruitment.1.log_sd",
+      canonical_base
+    )
+    occurrence <- ave(
+      seq_along(canonical_base), canonical_base,
+      FUN = function(index) seq_along(index) - 1L
+    )
+    repeated <- table(canonical_base)[canonical_base] > 1L
+    canonical_names <- canonical_base
+    canonical_names[repeated] <- paste0(
+      canonical_base[repeated], ".", occurrence[repeated]
+    )
+    log_slope <- grepl("\\.log_slope\\.[0-9]+$", raw_names)
+    canonical_initial <- start
+    canonical_final <- as.numeric(fit$par)
+    canonical_initial[log_slope] <- exp(canonical_initial[log_slope])
+    canonical_final[log_slope] <- exp(canonical_final[log_slope])
+    canonical_initial_gradient <- as.numeric(initial$gradient)
+    canonical_final_gradient <- as.numeric(final$gradient)
+    canonical_initial_gradient[log_slope] <-
+      canonical_initial_gradient[log_slope] / canonical_initial[log_slope]
+    canonical_final_gradient[log_slope] <-
+      canonical_final_gradient[log_slope] / canonical_final[log_slope]
     return(list(
       backend = if (quadra_backend == "none") "TMB" else quadra_backend,
       model_size = model_size,
       n_fixed = length(fixed),
       n_random = length(random),
+      parameter_names = c(fixed_names, random_names),
+      parameter_types = c(
+        rep("fixed", length(fixed)), rep("random", length(random))
+      ),
+      canonical_parameter_names = canonical_names,
+      canonical_initial_parameters = canonical_initial,
+      canonical_initial_gradient = canonical_initial_gradient,
+      canonical_final_parameters = canonical_final,
+      canonical_final_gradient = canonical_final_gradient,
       initial_parameters = start,
       initial_objective = as.numeric(initial$objective),
       initial_gradient = as.numeric(initial$gradient),
