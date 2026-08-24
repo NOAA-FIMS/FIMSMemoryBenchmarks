@@ -10,6 +10,8 @@
 #' @param instruments_attach_delay Seconds R waits before Instruments attaches.
 #' @param instruments_time_limit Maximum Instruments recording duration, using
 #'   an `xctrace` duration such as `30m` or `1h`.
+#' @param model_size Benchmark scenario: `"large"` uses 120 years and
+#'   `"medium"` retains the original 30-year model.
 #'
 #' @return Invisibly returns the new output directory path.
 #' @examples
@@ -19,10 +21,12 @@
 #' }
 compare_fims_branches <- function(
     ref_first = "main",
-    ref_compare = "remove-direct-rcpp",
+    ref_compare = "remove-direct-rcpp-main",
     macos_instruments = TRUE,
     instruments_attach_delay = 6,
-    instruments_time_limit = "30m") {
+    instruments_time_limit = "30m",
+    model_size = c("large", "medium")) {
+  model_size <- match.arg(model_size)
   refs <- c(ref_first = ref_first, ref_compare = ref_compare)
   if (anyNA(refs) || any(!nzchar(refs))) {
     stop("Both refs must be non-empty branch, tag, or commit names.", call. = FALSE)
@@ -56,7 +60,8 @@ compare_fims_branches <- function(
     paste0("REF_COMPARE=", shQuote(ref_compare)),
     paste0("MACOS_INSTRUMENTS=", as.integer(isTRUE(macos_instruments))),
     paste0("FIMS_INSTRUMENTS_ATTACH_DELAY=", instruments_attach_delay),
-    paste0("INSTRUMENTS_TIME_LIMIT=", shQuote(instruments_time_limit))
+    paste0("INSTRUMENTS_TIME_LIMIT=", shQuote(instruments_time_limit)),
+    paste0("MODEL_SIZE=", shQuote(model_size))
   )
 
   message(sprintf("Comparing FIMS '%s' (baseline) with '%s'...", ref_first, ref_compare))

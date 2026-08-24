@@ -10,6 +10,7 @@ cd "$REPO_ROOT"
 # Set these in the environment to compare different branches without editing.
 REF_FIRST="${REF_FIRST:-main}"
 REF_COMPARE="${REF_COMPARE:-xptr-refactor}"
+export FIMS_BENCHMARK_MODEL_SIZE="${MODEL_SIZE:-large}"
 SUMMARY_ARGS=()
 CPU_SUMMARY_ARGS=()
 HOST_OS="$(uname -s)"
@@ -91,8 +92,9 @@ run_ref() {
       echo "=== Running Instruments Time Profiler -> $cpu_trace ==="
       REPO_ROOT="$REPO_ROOT" \
         FIMS_INSTRUMENTS_ATTACH_DELAY="${FIMS_INSTRUMENTS_ATTACH_DELAY:-6}" \
+        FIMS_CPU_PROFILE_SECONDS="${CPU_PROFILE_SECONDS:-10}" \
         Rscript -e \
-        "Sys.sleep(as.numeric(Sys.getenv('FIMS_INSTRUMENTS_ATTACH_DELAY'))); source(file.path(Sys.getenv('REPO_ROOT'), 'R', 'setup_FIMS.R')); setup_fims_model(mode = 'inner'); quit(save='no', status=0)" &
+        "Sys.sleep(as.numeric(Sys.getenv('FIMS_INSTRUMENTS_ATTACH_DELAY'))); source(file.path(Sys.getenv('REPO_ROOT'), 'R', 'setup_FIMS.R')); setup_fims_model(mode = 'inner', inner_duration_seconds = as.numeric(Sys.getenv('FIMS_CPU_PROFILE_SECONDS'))); quit(save='no', status=0)" &
       local cpu_pid=$!
       if xctrace record --template "Time Profiler" \
         --time-limit "${INSTRUMENTS_TIME_LIMIT:-30m}" \
@@ -137,8 +139,9 @@ run_ref() {
     local cpu_status="not-requested"
     if [[ "${CPU_PROFILE:-1}" == "1" ]] && command -v perf >/dev/null 2>&1; then
       echo "=== Running Linux perf CPU profiler -> $perf_data ==="
-      if REPO_ROOT="$REPO_ROOT" perf record -g -o "$perf_data" -- \
-        Rscript -e "source(file.path(Sys.getenv('REPO_ROOT'), 'R', 'setup_FIMS.R')); setup_fims_model(mode = 'inner'); quit(save='no', status=0)"; then
+      if REPO_ROOT="$REPO_ROOT" FIMS_CPU_PROFILE_SECONDS="${CPU_PROFILE_SECONDS:-10}" \
+        perf record -g -o "$perf_data" -- \
+        Rscript -e "source(file.path(Sys.getenv('REPO_ROOT'), 'R', 'setup_FIMS.R')); setup_fims_model(mode = 'inner', inner_duration_seconds = as.numeric(Sys.getenv('FIMS_CPU_PROFILE_SECONDS'))); quit(save='no', status=0)"; then
         cpu_status="captured"
         perf report --stdio --sort comm,dso,symbol -i "$perf_data" > "$perf_report"
       else

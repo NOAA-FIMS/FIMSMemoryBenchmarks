@@ -19,13 +19,53 @@ install_fims_debug <- function(ref = "main") {
   )
 }
 
+expand_fims_years <- function(data, n_years) {
+  base_years <- max(data$timing[data$type == "catch"], na.rm = TRUE)
+  static <- data[is.na(data$timing), , drop = FALSE]
+  dynamic_types <- unique(data$type[!is.na(data$timing)])
+  expanded <- lapply(dynamic_types, function(type) {
+    source <- data[data$type == type & !is.na(data$timing), , drop = FALSE]
+    source_years <- if (identical(type, "weight_at_age")) {
+      base_years + 1L
+    } else {
+      base_years
+    }
+    target_years <- if (identical(type, "weight_at_age")) {
+      n_years + 1L
+    } else {
+      n_years
+    }
+    do.call(rbind, lapply(seq_len(target_years), function(year) {
+      source_year <- (year - 1L) %% source_years + 1L
+      rows <- source[source$timing == source_year, , drop = FALSE]
+      rows$timing <- year
+      rows
+    }))
+  })
+  result <- do.call(rbind, c(list(static), expanded))
+  rownames(result) <- NULL
+  result
+}
+
 
 setup_fims_model <- function(mode = c(
                                "helper", "sd_report_clear", "sd_report",
                                "opt_only", "inner", "tape_only",
                                "initialize_only"
+                             ),
+                             inner_duration_seconds = 0,
+                             model_size = Sys.getenv(
+                               "FIMS_BENCHMARK_MODEL_SIZE", "large"
                              )) {
   mode <- match.arg(mode)
+  model_size <- match.arg(model_size, c("medium", "large"))
+  if (!is.numeric(inner_duration_seconds) ||
+      length(inner_duration_seconds) != 1L ||
+      is.na(inner_duration_seconds) ||
+      inner_duration_seconds < 0) {
+    stop("`inner_duration_seconds` must be one non-negative number.",
+         call. = FALSE)
+  }
 
   # Map modes to execution depths
   mode_levels <- c(
@@ -46,8 +86,17 @@ setup_fims_model <- function(mode = c(
   message("--> Step 1: Initializing data & parameters...")
 
   data("data_big")
+  model_years <- if (model_size == "large") 120L else 30L
+  benchmark_data <- if (model_size == "large") {
+    expand_fims_years(data_big, model_years)
+  } else {
+    data_big
+  }
+  message(sprintf(
+    "--> Model size: %s (%d years)", model_size, model_years
+  ))
   # Prepare the package data for being used in a FIMS model
-  data_4_model <- FIMSFrame(data_big)
+  data_4_model <- FIMSFrame(benchmark_data)
 
   if (exists("setup_default_parameters", mode = "function")) {
     parameters_4_model <- setup_default_parameters(data = data_4_model)
@@ -62,7 +111,7 @@ setup_fims_model <- function(mode = c(
   fishing_mortality <- tibble::tibble(
     fleet = "fleet1",
     label = "log_Fmort",
-    value = log(c(
+    value = log(rep(c(
       0.009459165, 0.027288858, 0.045063639,
       0.061017825, 0.048600752, 0.087420554,
       0.088447204, 0.186607929, 0.109008958,
@@ -73,20 +122,20 @@ setup_fims_model <- function(mode = c(
       0.254107720, 0.418478117, 0.345721184,
       0.343685540, 0.314171227, 0.308026829,
       0.431745298, 0.328030899, 0.499675368
-    ))
+    ), length.out = model_years))
   )
   fishing_mortality[[timing_column]] <- seq(get_n_years(data_4_model))
 
   recruitment_deviations <- tibble::tibble(
     label = "log_devs",
-    value = c(
+    value = rep(c(
       0.43787763, -0.13299042, -0.43251973, 0.64861200, 0.50640852,
       -0.06958319, 0.30246260, -0.08257384, 0.20740372, 0.15289604,
       -0.21709207, -0.13320626, 0.11225374, -0.10650836, 0.26877132,
       0.24094126, -0.54480751, -0.23680557, -0.58483386, 0.30122785,
       0.21930545, -0.22281699, -0.51358369, 0.15740234, -0.53988240,
       -0.19556523, 0.20094360, 0.37248740, -0.07163145
-    )
+    ), length.out = model_years - 1L)
   )
   recruitment_deviations[[timing_column]] <- 2:get_n_years(data_4_model)
 
@@ -240,20 +289,34 @@ setup_fims_model <- function(mode = c(
 
   if (target_level == 3) {
     message("--> Step 3: Evaluate objective and gradient...")
-    if (quadra_backend == "native") {
-      native_quadra_evaluate(
-        fixed = get_fixed(),
-        random = get_random()
-      )
+    evaluate_inner <- if (quadra_backend == "native") {
+      fixed <- get_fixed()
+      random <- get_random()
+      function() native_quadra_evaluate(fixed = fixed, random = random)
     } else if (quadra_backend == "legacy") {
-      EvaluateQuadraModel(
-        fixed_values = get_fixed(),
-        random_values = get_random()
+      fixed <- get_fixed()
+      random <- get_random()
+      function() EvaluateQuadraModel(
+        fixed_values = fixed,
+        random_values = random
       )
     } else {
-      obj$fn()
-      obj$gr()
+      function() {
+        obj$fn()
+        obj$gr()
+      }
     }
+    started <- proc.time()[["elapsed"]]
+    evaluations <- 0L
+    repeat {
+      evaluate_inner()
+      evaluations <- evaluations + 1L
+      if (inner_duration_seconds == 0 ||
+          proc.time()[["elapsed"]] - started >= inner_duration_seconds) {
+        break
+      }
+    }
+    message(sprintf("--> Completed %d inner evaluation(s).", evaluations))
     return(print("model ran without error"))
   }
 

@@ -10,6 +10,8 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 
+MAX_HOT_SYMBOLS = 25
+
 
 @dataclass
 class Run:
@@ -47,7 +49,7 @@ def mac_symbols(path: Path) -> list[tuple[str, float]]:
                 symbol = frame.get("name") or (frame.text or "").strip()
         if symbol:
             totals[symbol] = totals.get(symbol, 0) + weight
-    return sorted(totals.items(), key=lambda item: item[1], reverse=True)[:15]
+    return sorted(totals.items(), key=lambda item: item[1], reverse=True)
 
 
 def perf_symbols(path: Path) -> list[tuple[str, float]]:
@@ -59,7 +61,7 @@ def perf_symbols(path: Path) -> list[tuple[str, float]]:
         match = pattern.match(line)
         if match:
             result.append((match.group(2), float(match.group(1))))
-    return result[:15]
+    return result
 
 
 def render(runs: list[Run], platform_name: str) -> str:
@@ -83,10 +85,18 @@ def render(runs: list[Run], platform_name: str) -> str:
             continue
         label = "Samples" if platform_name == "Darwin" else "Overhead"
         lines.extend([f"| Rank | Symbol | {label} |", "|---:|---|---:|"])
-        total = sum(value for _, value in run.symbols) or 1
-        for rank, (symbol, value) in enumerate(run.symbols, 1):
-            shown = f"{value / total * 100:.2f}%" if platform_name == "Darwin" else f"{value:.2f}%"
+        sampled_total = sum(value for _, value in run.symbols) or 1
+        hot_symbols = run.symbols[:MAX_HOT_SYMBOLS]
+        shown_total = sum(value for _, value in hot_symbols)
+        for rank, (symbol, value) in enumerate(hot_symbols, 1):
+            shown = f"{value / sampled_total * 100:.2f}%" if platform_name == "Darwin" else f"{value:.2f}%"
             lines.append(f"| {rank} | `{symbol.replace('|', chr(92) + '|')}` | {shown} |")
+        shown_percentage = (
+            shown_total / sampled_total * 100
+            if platform_name == "Darwin"
+            else shown_total
+        )
+        lines.append(f"|  | **Top {len(hot_symbols)} total** | **{shown_percentage:.2f}%** |")
         lines.append("")
     lines.extend([
         "## Interpretation notes", "",

@@ -53,6 +53,13 @@ editing the script:
 REF_FIRST=main REF_COMPARE=my-feature-branch bash scripts/run_massif.sh
 ```
 
+The runner uses the 120-year `large` wrapper model by default. Retain the
+original 30-year baseline with `MODEL_SIZE=medium`:
+
+```bash
+MODEL_SIZE=medium bash scripts/run_massif.sh
+```
+
 You can also run the comparison from R. The function invisibly returns the new
 output directory:
 
@@ -60,7 +67,8 @@ output directory:
 source("R/main.R")
 report_dir <- compare_fims_branches(
   ref_first = "main",
-  ref_compare = "remove-direct-rcpp"
+  ref_compare = "remove-direct-rcpp",
+  model_size = "large"
 )
 ```
 
