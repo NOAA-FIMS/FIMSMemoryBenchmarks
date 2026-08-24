@@ -20,9 +20,11 @@ install_fims_debug <- function(ref = "main") {
 }
 
 
-setup_fims_model <- function(mode = c("helper", "sd_report_clear", "sd_report",
-                                      "opt_only", "inner", "tape_only",
-                                      "initialize_only")) {
+setup_fims_model <- function(mode = c(
+                               "helper", "sd_report_clear", "sd_report",
+                               "opt_only", "inner", "tape_only",
+                               "initialize_only"
+                             )) {
   mode <- match.arg(mode)
 
   # Map modes to execution depths
@@ -31,8 +33,8 @@ setup_fims_model <- function(mode = c("helper", "sd_report_clear", "sd_report",
     "tape_only"       = 2,
     "inner"           = 3,
     "opt_only"        = 4,
-    "sdreport"        = 5,
-    "sdreport_clear"  = 6,
+    "sd_report"       = 5,
+    "sd_report_clear" = 6,
     "helper"          = 7
   )
 
@@ -47,29 +49,52 @@ setup_fims_model <- function(mode = c("helper", "sd_report_clear", "sd_report",
   # Prepare the package data for being used in a FIMS model
   data_4_model <- FIMSFrame(data_big)
 
-  parameters_4_model <- create_default_configurations(data = data_4_model) |>
-    create_default_parameters(data = data_4_model) |>
-    tidyr::unnest(cols = data) |>
+  if (exists("setup_default_parameters", mode = "function")) {
+    parameters_4_model <- setup_default_parameters(data = data_4_model)
+    timing_column <- "timing"
+  } else {
+    parameters_4_model <- create_default_configurations(data = data_4_model) |>
+      create_default_parameters(data = data_4_model) |>
+      tidyr::unnest(cols = data)
+    timing_column <- "time"
+  }
+
+  fishing_mortality <- tibble::tibble(
+    fleet = "fleet1",
+    label = "log_Fmort",
+    value = log(c(
+      0.009459165, 0.027288858, 0.045063639,
+      0.061017825, 0.048600752, 0.087420554,
+      0.088447204, 0.186607929, 0.109008958,
+      0.132704335, 0.150615473, 0.161242955,
+      0.116640187, 0.169346119, 0.180191913,
+      0.161240483, 0.314573212, 0.257247574,
+      0.254887252, 0.251462108, 0.349101406,
+      0.254107720, 0.418478117, 0.345721184,
+      0.343685540, 0.314171227, 0.308026829,
+      0.431745298, 0.328030899, 0.499675368
+    ))
+  )
+  fishing_mortality[[timing_column]] <- seq(get_n_years(data_4_model))
+
+  recruitment_deviations <- tibble::tibble(
+    label = "log_devs",
+    value = c(
+      0.43787763, -0.13299042, -0.43251973, 0.64861200, 0.50640852,
+      -0.06958319, 0.30246260, -0.08257384, 0.20740372, 0.15289604,
+      -0.21709207, -0.13320626, 0.11225374, -0.10650836, 0.26877132,
+      0.24094126, -0.54480751, -0.23680557, -0.58483386, 0.30122785,
+      0.21930545, -0.22281699, -0.51358369, 0.15740234, -0.53988240,
+      -0.19556523, 0.20094360, 0.37248740, -0.07163145
+    )
+  )
+  recruitment_deviations[[timing_column]] <- 2:get_n_years(data_4_model)
+
+  parameters_4_model <- parameters_4_model |>
     # Update log_Fmort initial values for Fleet1
     dplyr::rows_update(
-      tibble::tibble(
-        fleet = "fleet1",
-        label = "log_Fmort",
-        time = seq(get_n_years(data_4_model)),
-        value = log(c(
-          0.009459165, 0.027288858, 0.045063639,
-          0.061017825, 0.048600752, 0.087420554,
-          0.088447204, 0.186607929, 0.109008958,
-          0.132704335, 0.150615473, 0.161242955,
-          0.116640187, 0.169346119, 0.180191913,
-          0.161240483, 0.314573212, 0.257247574,
-          0.254887252, 0.251462108, 0.349101406,
-          0.254107720, 0.418478117, 0.345721184,
-          0.343685540, 0.314171227, 0.308026829,
-          0.431745298, 0.328030899, 0.499675368
-        ))
-      ),
-      by = c("fleet", "label", "time")
+      fishing_mortality,
+      by = c("fleet", "label", timing_column)
     ) |>
     # Update selectivity parameters and log_q for survey1
     dplyr::rows_update(
@@ -82,19 +107,8 @@ setup_fims_model <- function(mode = c("helper", "sd_report_clear", "sd_report",
     ) |>
     # Update log_devs in the Recruitment module (time steps 2-30)
     dplyr::rows_update(
-      tibble::tibble(
-        label = "log_devs",
-        time = 2:get_n_years(data_4_model),
-        value = c(
-          0.43787763, -0.13299042, -0.43251973, 0.64861200, 0.50640852,
-          -0.06958319, 0.30246260, -0.08257384, 0.20740372, 0.15289604,
-          -0.21709207, -0.13320626, 0.11225374, -0.10650836, 0.26877132,
-          0.24094126, -0.54480751, -0.23680557, -0.58483386, 0.30122785,
-          0.21930545, -0.22281699, -0.51358369, 0.15740234, -0.53988240,
-          -0.19556523, 0.20094360, 0.37248740, -0.07163145
-        )
-      ),
-      by = c("label", "time")
+      recruitment_deviations,
+      by = c("label", timing_column)
     ) |>
     # Update log_sd for log_devs in the Recruitment module
     dplyr::rows_update(
@@ -130,7 +144,9 @@ setup_fims_model <- function(mode = c("helper", "sd_report_clear", "sd_report",
   init_parms <- parameters_4_model |>
     initialize_fims(data = data_4_model)
 
-  if (target_level == 1) return(print("model ran without error"))
+  if (target_level == 1) {
+    return(print("model ran without error"))
+  }
 
   if (target_level == 7) {
     message("--> Step 2: Fit model with fit_fims helper function...")
@@ -140,41 +156,167 @@ setup_fims_model <- function(mode = c("helper", "sd_report_clear", "sd_report",
     return(print("model ran without error"))
   }
 
-  message("--> Step 2: Create TMB tape...")
-
-  obj <- TMB::MakeADFun(
-    data = list(),
-    parameters = init_parms$parameters,
-    random = "re",
-    DLL = "FIMS",
-    silent = TRUE
+  fims_namespace <- asNamespace("FIMS")
+  native_quadra_evaluate <- get0(
+    "native_quadra_evaluate",
+    envir = fims_namespace,
+    mode = "function",
+    inherits = FALSE
   )
+  native_quadra_fit <- get0(
+    "native_quadra_fit",
+    envir = fims_namespace,
+    mode = "function",
+    inherits = FALSE
+  )
+  native_quadra_sdreport <- get0(
+    "native_quadra_sdreport",
+    envir = fims_namespace,
+    mode = "function",
+    inherits = FALSE
+  )
+  has_native_quadra <- all(vapply(
+    list(native_quadra_evaluate, native_quadra_fit, native_quadra_sdreport),
+    is.function,
+    logical(1)
+  ))
 
-  if (target_level == 2) return(print("model ran without error"))
+  legacy_quadra_functions <- c(
+    "CreateQuadraModel", "EvaluateQuadraModel", "fit_fims_quadra_joint",
+    "get_fixed", "get_random"
+  )
+  has_legacy_quadra_api <- all(vapply(
+    legacy_quadra_functions,
+    exists,
+    logical(1),
+    mode = "function",
+    inherits = TRUE
+  ))
+  has_legacy_quadra <- !has_native_quadra && has_legacy_quadra_api && tryCatch(
+    {
+      CreateQuadraModel()
+      TRUE
+    },
+    error = function(error) {
+      if (grepl(
+        "Quadra support was not enabled",
+        conditionMessage(error),
+        fixed = TRUE
+      )) {
+        return(FALSE)
+      }
+      stop(error)
+    }
+  )
+  quadra_backend <- if (has_native_quadra) {
+    "native"
+  } else if (has_legacy_quadra) {
+    "legacy"
+  } else {
+    "none"
+  }
+
+  if (quadra_backend == "native") {
+    message("--> Step 2: Use native Quadra model...")
+  } else if (quadra_backend == "legacy") {
+    message("--> Step 2: Created legacy Quadra model...")
+  } else {
+    message("--> Step 2: Create TMB tape...")
+
+    obj <- TMB::MakeADFun(
+      data = list(),
+      parameters = init_parms$parameters,
+      random = "re",
+      DLL = "FIMS",
+      silent = TRUE
+    )
+  }
+
+
+
+  if (target_level == 2) {
+    return(print("model ran without error"))
+  }
 
   if (target_level == 3) {
-    message("--> Step 3: Run inner optimization and get gradients...")
-    obj$fn()
-    obj$gr()
+    message("--> Step 3: Evaluate objective and gradient...")
+    if (quadra_backend == "native") {
+      native_quadra_evaluate(
+        fixed = get_fixed(),
+        random = get_random()
+      )
+    } else if (quadra_backend == "legacy") {
+      EvaluateQuadraModel(
+        fixed_values = get_fixed(),
+        random_values = get_random()
+      )
+    } else {
+      obj$fn()
+      obj$gr()
+    }
     return(print("model ran without error"))
   }
 
   message("--> Step 4: Fit the model...")
-  opt <- nlminb(
-    start = obj$par,
-    objective = obj$fn,
-    gradient = obj$gr,
-    control = list(eval.max = 10000, iter.max = 10000, trace = 0)
-  )
-  if (target_level == 4) return(print("model ran without error"))
+  if (quadra_backend == "native") {
+    fit <- native_quadra_fit(
+      fixed = get_fixed(),
+      random = get_random(),
+      method = "joint",
+      max_iterations = 500L,
+      gradient_tolerance = 1e-5
+    )
+  } else if (quadra_backend == "legacy") {
+    fixed0 <- get_fixed()
+    random0 <- get_random()
+    fit <- fit_fims_quadra_joint(
+      fixed_values = fixed0,
+      random_values = random0,
+      max_iterations = 500L,
+      gradient_tolerance = 1e-5
+    )
+  } else {
+    opt <- nlminb(
+      start = obj$par,
+      objective = obj$fn,
+      gradient = obj$gr,
+      control = list(eval.max = 10000, iter.max = 10000, trace = 0)
+    )
+  }
 
-
-  message("--> Step 5: Call sdreport...")
-  sdreport <- TMB::sdreport(obj)
-  if (target_level == 5) return(print("model ran without error"))
+  if (target_level == 4) {
+    return(print("model ran without error"))
+  }
+  if (quadra_backend == "native") {
+    message("--> Step 5: Create native Quadra uncertainty report...")
+    sdreport <- native_quadra_sdreport(
+      fixed = fit$par,
+      random = fit$random
+    )
+  } else if (quadra_backend == "legacy") {
+    message("--> Step 5: Create Quadra uncertainty report...")
+    if (!exists("quadra_model_diagnostics", mode = "function")) {
+      stop(
+        "This Quadra build does not expose `quadra_model_diagnostics()`; ",
+        "use mode = 'opt_only' or an earlier stage.",
+        call. = FALSE
+      )
+    }
+    sdreport <- quadra_model_diagnostics(
+      fixed_values = fit$par,
+      random_values = fit$random
+    )
+  } else {
+    message("--> Step 5: Call sdreport...")
+    sdreport <- TMB::sdreport(obj)
+  }
+  if (target_level == 5) {
+    return(print("model ran without error"))
+  }
 
   message("--> Step 5: clear memory...")
   clear()
-  if (target_level == 6) return(print("model ran without error"))
-
+  if (target_level == 6) {
+    return(print("model ran without error"))
+  }
 }
