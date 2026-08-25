@@ -5,12 +5,12 @@
         <info>
             <target>
                 <device uuid="835C8171-4C64-5BA3-864A-C3252C89DAC6" model="MacBook Pro" name="HQSTM4365825" os-version="15.7.7 (24G720)" platform="macOS"/>
-                <process return-exit-status="0" name="R" pid="4898" termination-reason="exit(0)"/>
+                <process return-exit-status="0" name="R" pid="12284" termination-reason="exit(0)"/>
             </target>
             <summary>
-                <start-date>2026-08-24T19:34:53.143-04:00</start-date>
-                <end-date>2026-08-24T19:35:04.994-04:00</end-date>
-                <duration>11.850489</duration>
+                <start-date>2026-08-24T20:08:57.050-04:00</start-date>
+                <end-date>2026-08-24T20:09:08.711-04:00</end-date>
+                <duration>11.660814</duration>
                 <end-reason>Target app exited</end-reason>
                 <instruments-version>16.0 (16C5032a)</instruments-version>
                 <template-name>Allocations</template-name>
@@ -40,7 +40,7 @@
             </summary>
         </info>
         <processes>
-            <process name="R" pid="4898" path="/Library/Frameworks/R.framework/Resources/bin/exec/R"/>
+            <process name="R" pid="12284" path="/Library/Frameworks/R.framework/Resources/bin/exec/R"/>
             <process name="kernel.release.t6030" pid="0" path="kernel.release.t6030"/>
         </processes>
         <data>

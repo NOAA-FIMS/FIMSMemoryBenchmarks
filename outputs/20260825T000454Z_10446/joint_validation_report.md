@@ -6,8 +6,8 @@ Both branches use the same wrapper-built model, starting values, joint fixed/ran
 
 | Git ref | Backend | Fixed | Random | Initial objective | Final objective | Final gradient norm | Convergence | Iterations | Function evals | Gradient evals | Elapsed |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| main | TMB | 139 | 119 | 168417.46 | 14115.796 | 0.043716689 | 0 | 951 | 1464 | 952 | 1.963s |
-| dev-native-quadra | native | 139 | 119 | 168417.46 | 14115.796 | 0.029366961 | 0 | 966 | 1497 | 967 | 6.415s |
+| main | TMB | 139 | 119 | 168417.46 | 14115.796 | 0.043716689 | 0 | 951 | 1464 | 952 | 1.954s |
+| dev-native-quadra | native | 139 | 119 | 168417.46 | 14115.796 | 0.029366961 | 0 | 966 | 1497 | 967 | 6.355s |
 
 ## Agreement
 

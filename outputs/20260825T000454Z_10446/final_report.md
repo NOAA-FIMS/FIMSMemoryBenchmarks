@@ -1,6 +1,6 @@
 # FIMS Benchmark Final Report
 
-Generated: `2026-08-24 23:35:44 UTC`
+Generated: `2026-08-25 00:09:47 UTC`
 
 ## Model
 
@@ -284,8 +284,8 @@ Both branches use the same wrapper-built model, starting values, joint fixed/ran
 
 | Git ref | Backend | Fixed | Random | Initial objective | Final objective | Final gradient norm | Convergence | Iterations | Function evals | Gradient evals | Elapsed |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| main | TMB | 139 | 119 | 168417.46 | 14115.796 | 0.043716689 | 0 | 951 | 1464 | 952 | 1.963s |
-| dev-native-quadra | native | 139 | 119 | 168417.46 | 14115.796 | 0.029366961 | 0 | 966 | 1497 | 967 | 6.415s |
+| main | TMB | 139 | 119 | 168417.46 | 14115.796 | 0.043716689 | 0 | 951 | 1464 | 952 | 1.954s |
+| dev-native-quadra | native | 139 | 119 | 168417.46 | 14115.796 | 0.029366961 | 0 | 966 | 1497 | 967 | 6.355s |
 
 ### Agreement
 
@@ -310,7 +310,7 @@ Canonical parameter sets agree: **yes**. Convergence codes agree: **yes**.
 Source report: [cpu_profile_report.md](cpu_profile_report.md)
 
 
-Generated: `2026-08-24T23:35:43+00:00`  
+Generated: `2026-08-25T00:09:47+00:00`
 Profiler: Instruments Time Profiler
 
 ### Summary
@@ -328,63 +328,63 @@ Each branch is sampled in a separate model run after its FIMS build is installed
 
 | Rank | Symbol | Samples |
 |---:|---|---:|
-| 1 | `TMBad::global::Complete<TMBad::global::ad_plain::MulOp_<true, true>>::reverse_decr(TMBad::ReverseArgs<double>&)` | 7.26% |
-| 2 | `bcEval_loop` | 5.67% |
-| 3 | `TMBad::global::Complete<TMBad::global::ad_plain::AddOp_<true, true>>::reverse_decr(TMBad::ReverseArgs<double>&)` | 3.90% |
-| 4 | `TMBad::global::hash_sweep(TMBad::global::hash_config) const` | 3.65% |
-| 5 | `TMBad::ADFun<TMBad::global::ad_aug>::Jacobian(std::__1::vector<double, std::__1::allocator<double>> const&, std::__1::vector<double, std::__1::allocator<double>> const&)` | 3.08% |
-| 6 | `TMBad::global::subgraph_cache_ptr() const` | 2.74% |
-| 7 | `std::__1::pair<unsigned long long*, bool> std::__1::__partition_with_equals_on_right[abi:ne190102]<std::__1::_ClassicAlgPolicy, unsigned long long*, std::__1::ranges::less>(unsigned long long*, unsigned long long*, std::__1::ranges::less)` | 2.47% |
-| 8 | `_platform_memmove` | 2.36% |
-| 9 | `TMBad::ADFun<TMBad::global::ad_aug>::operator()(std::__1::vector<double, std::__1::allocator<double>> const&)` | 2.31% |
-| 10 | `Rf_findVarInFrame3` | 2.23% |
-| 11 | `Rf_matchArgs_NR` | 1.95% |
-| 12 | `radix::radix<unsigned int, unsigned long long>::first_occurance()` | 1.79% |
-| 13 | `RunGenCollect` | 1.62% |
-| 14 | `findVarLocInFrame` | 1.51% |
-| 15 | `CONS_NR` | 1.49% |
-| 16 | `SETCAR` | 1.34% |
-| 17 | `TMBad::global::extract_sub_inplace(std::__1::vector<bool, std::__1::allocator<bool>>)` | 1.31% |
-| 18 | `__bzero` | 1.30% |
-| 19 | `TMBad::global::ad_aug::operator+(TMBad::global::ad_aug const&) const` | 1.26% |
-| 20 | `TMBad::remap_identical_sub_expressions(TMBad::global&, std::__1::vector<unsigned long long, std::__1::allocator<unsigned long long>>)` | 1.17% |
-| 21 | `TMBad::global::extract_sub(std::__1::vector<unsigned long long, std::__1::allocator<unsigned long long>>&, TMBad::global)` | 1.15% |
-| 22 | `TMBad::global::Complete<TMBad::global::ad_plain::DivOp_<true, true>>::reverse_decr(TMBad::ReverseArgs<double>&)` | 1.13% |
-| 23 | `CAR` | 1.07% |
-| 24 | `setup_vcache` | 1.06% |
-| 25 | `TMBad::global::operation_stack::push_back(TMBad::global::OperatorPure*)` | 1.05% |
-|  | **Top 25 total** | **55.87%** |
+| 1 | `TMBad::global::Complete<TMBad::global::ad_plain::MulOp_<true, true>>::reverse_decr(TMBad::ReverseArgs<double>&)` | 6.42% |
+| 2 | `bcEval_loop` | 5.86% |
+| 3 | `TMBad::global::Complete<TMBad::global::ad_plain::AddOp_<true, true>>::reverse_decr(TMBad::ReverseArgs<double>&)` | 3.64% |
+| 4 | `TMBad::global::subgraph_cache_ptr() const` | 2.91% |
+| 5 | `TMBad::ADFun<TMBad::global::ad_aug>::Jacobian(std::__1::vector<double, std::__1::allocator<double>> const&, std::__1::vector<double, std::__1::allocator<double>> const&)` | 2.72% |
+| 6 | `std::__1::pair<unsigned long long*, bool> std::__1::__partition_with_equals_on_right[abi:ne190102]<std::__1::_ClassicAlgPolicy, unsigned long long*, std::__1::ranges::less>(unsigned long long*, unsigned long long*, std::__1::ranges::less)` | 2.61% |
+| 7 | `_platform_memmove` | 2.48% |
+| 8 | `Rf_findVarInFrame3` | 2.20% |
+| 9 | `TMBad::ADFun<TMBad::global::ad_aug>::operator()(std::__1::vector<double, std::__1::allocator<double>> const&)` | 2.11% |
+| 10 | `void radix::radix<unsigned long, unsigned long long>::run_sort<true>()` | 2.10% |
+| 11 | `Rf_matchArgs_NR` | 2.08% |
+| 12 | `CONS_NR` | 1.72% |
+| 13 | `RunGenCollect` | 1.68% |
+| 14 | `void radix::radix<unsigned int, unsigned long long>::run_sort<true>()` | 1.53% |
+| 15 | `TMBad::global::extract_sub_inplace(std::__1::vector<bool, std::__1::allocator<bool>>)` | 1.46% |
+| 16 | `findVarLocInFrame` | 1.43% |
+| 17 | `TMBad::global::extract_sub(std::__1::vector<unsigned long long, std::__1::allocator<unsigned long long>>&, TMBad::global)` | 1.42% |
+| 18 | `__bzero` | 1.36% |
+| 19 | `SETCAR` | 1.35% |
+| 20 | `TMBad::global::hash_sweep(TMBad::global::hash_config) const` | 1.31% |
+| 21 | `TMBad::global::ad_plain TMBad::global::add_to_stack<TMBad::global::ad_plain::AddOp_<true, true>>(TMBad::global::ad_plain const&, TMBad::global::ad_plain const&)` | 1.18% |
+| 22 | `TMBad::global::operation_stack::push_back(TMBad::global::OperatorPure*)` | 1.16% |
+| 23 | `TMBad::remap_identical_sub_expressions(TMBad::global&, std::__1::vector<unsigned long long, std::__1::allocator<unsigned long long>>)` | 1.12% |
+| 24 | `_platform_strcmp$VARIANT$Base` | 1.00% |
+| 25 | `TMBad::global::Complete<TMBad::global::ad_plain::DivOp_<true, true>>::reverse_decr(TMBad::ReverseArgs<double>&)` | 0.98% |
+|  | **Top 25 total** | **53.84%** |
 
 #### `dev-native-quadra`
 
 | Rank | Symbol | Samples |
 |---:|---|---:|
-| 1 | `quadra::CompactFirstOrderTape::Evaluate(Eigen::Matrix<double, -1, 1, 0, -1, 1> const&, Eigen::Matrix<double, -1, 1, 0, -1, 1>&)` | 57.93% |
-| 2 | `bcEval_loop` | 4.79% |
-| 3 | `Rf_findVarInFrame3` | 1.81% |
-| 4 | `Rf_matchArgs_NR` | 1.73% |
-| 5 | `exp` | 1.44% |
-| 6 | `SETCAR` | 1.42% |
-| 7 | `RunGenCollect` | 1.35% |
-| 8 | `CONS_NR` | 1.27% |
-| 9 | `findVarLocInFrame` | 1.14% |
-| 10 | `CAR` | 0.78% |
-| 11 | `_platform_strcmp$VARIANT$Base` | 0.75% |
-| 12 | `setup_vcache` | 0.73% |
-| 13 | `Rf_allocVector3` | 0.72% |
-| 14 | `Rf_cons` | 0.71% |
-| 15 | `Rf_eval` | 0.62% |
-| 16 | `__bzero` | 0.61% |
-| 17 | `SET_TAG` | 0.61% |
-| 18 | `Rf_protect` | 0.57% |
-| 19 | `Rf_mkPROMISE` | 0.53% |
-| 20 | `SET_PRVALUE` | 0.53% |
-| 21 | `Rf_findFun3` | 0.50% |
-| 22 | `Rf_NewEnvironment` | 0.42% |
-| 23 | `SET_PRENV` | 0.42% |
-| 24 | `log` | 0.42% |
-| 25 | `R_HashGet` | 0.39% |
-|  | **Top 25 total** | **82.19%** |
+| 1 | `quadra::CompactFirstOrderTape::Evaluate(Eigen::Matrix<double, -1, 1, 0, -1, 1> const&, Eigen::Matrix<double, -1, 1, 0, -1, 1>&)` | 36.22% |
+| 2 | `quadra::CompactFirstOrderTape::Forward()` | 21.52% |
+| 3 | `bcEval_loop` | 5.09% |
+| 4 | `Rf_findVarInFrame3` | 1.76% |
+| 5 | `Rf_matchArgs_NR` | 1.71% |
+| 6 | `exp` | 1.58% |
+| 7 | `findVarLocInFrame` | 1.38% |
+| 8 | `RunGenCollect` | 1.31% |
+| 9 | `CONS_NR` | 1.21% |
+| 10 | `SETCAR` | 1.18% |
+| 11 | `Rf_eval` | 0.81% |
+| 12 | `CAR` | 0.77% |
+| 13 | `Rf_cons` | 0.75% |
+| 14 | `_platform_strcmp$VARIANT$Base` | 0.72% |
+| 15 | `setup_vcache` | 0.67% |
+| 16 | `Rf_protect` | 0.66% |
+| 17 | `SET_TAG` | 0.64% |
+| 18 | `Rf_allocVector3` | 0.63% |
+| 19 | `__bzero` | 0.63% |
+| 20 | `Rf_findFun3` | 0.55% |
+| 21 | `R_HashGet` | 0.51% |
+| 22 | `log` | 0.49% |
+| 23 | `Rf_mkPROMISE` | 0.44% |
+| 24 | `Rf_length` | 0.42% |
+| 25 | `DYLD-STUB$$exp` | 0.41% |
+|  | **Top 25 total** | **82.06%** |
 
 ### Interpretation notes
 
@@ -397,7 +397,7 @@ Each branch is sampled in a separate model run after its FIMS build is installed
 Source report: [macos_memory_report.md](macos_memory_report.md)
 
 
-Generated: `2026-08-24T23:35:43+00:00`  
+Generated: `2026-08-25T00:09:47+00:00`
 Host: `macOS 15.7.7 (arm64)`  
 Profilers: Instruments Allocations and `/usr/bin/time -l`
 
@@ -407,32 +407,32 @@ macOS reports process-level physical memory rather than Massif's allocated heap.
 
 | Git ref | FIMS version | Maximum RSS | Peak footprint | Elapsed | Instruments |
 |---|---:|---:|---:|---:|---|
-| main | 0.10.0.9000 | **5.31 GiB** | 2.95 GiB | 14.77 s | captured |
-| dev-native-quadra | 0.10.0.9000 | **431.88 MiB** | 359.71 MiB | 6.40 s | captured |
+| main | 0.10.0.9000 | **4.96 GiB** | 2.99 GiB | 14.99 s | captured |
+| dev-native-quadra | 0.10.0.9000 | **489.28 MiB** | 382.49 MiB | 6.44 s | captured |
 
 ### Detailed branch comparison
 
-`dev-native-quadra` used **4.89 GiB less maximum RSS** than `main` (-92.06%).
+`dev-native-quadra` used **4.48 GiB less maximum RSS** than `main` (-90.37%).
 
 Positive deltas mean the comparison ref used more of that metric; negative deltas mean less.
 
 | Metric | `main` | `dev-native-quadra` | Delta | Change |
 |---|---:|---:|---:|---:|
-| Maximum RSS | 5.31 GiB | 431.88 MiB | −4.89 GiB | -92.06% |
-| Peak footprint | 2.95 GiB | 359.71 MiB | −2.60 GiB | -88.08% |
-| Elapsed time | 14.77 s | 6.40 s | -8.37 s | -56.67% |
-| User CPU time | 13.60 s | 6.31 s | -7.29 s | -53.60% |
-| System CPU time | 1.05 s | 0.06 s | -0.99 s | -94.29% |
-| Page reclaims | 525,663 | 31,538 | -494,125 | -94.00% |
-| Page faults | 46 | 24 | -22 | -47.83% |
+| Maximum RSS | 4.96 GiB | 489.28 MiB | −4.48 GiB | -90.37% |
+| Peak footprint | 2.99 GiB | 382.49 MiB | −2.62 GiB | -87.51% |
+| Elapsed time | 14.99 s | 6.44 s | -8.55 s | -57.04% |
+| User CPU time | 13.74 s | 6.35 s | -7.39 s | -53.78% |
+| System CPU time | 1.08 s | 0.07 s | -1.01 s | -93.52% |
+| Page reclaims | 546,868 | 35,203 | -511,665 | -93.56% |
+| Page faults | 62 | 24 | -38 | -61.29% |
 | Swaps | 0 | 0 | +0 | 0.00% |
 
 #### Interpretation
 
-- Maximum RSS decreased by 4.89 GiB (-92.06%), from 5.31 GiB to 431.88 MiB.
-- Peak memory footprint decreased by 2.60 GiB (-88.08%), from 2.95 GiB to 359.71 MiB.
-- Elapsed time decreased by 8.37 s (-56.67%), from 14.77 s to 6.40 s.
-- Page faults decreased by 22 (-47.83%), from 46 to 24.
+- Maximum RSS decreased by 4.48 GiB (-90.37%), from 4.96 GiB to 489.28 MiB.
+- Peak memory footprint decreased by 2.62 GiB (-87.51%), from 2.99 GiB to 382.49 MiB.
+- Elapsed time decreased by 8.55 s (-57.04%), from 14.99 s to 6.44 s.
+- Page faults decreased by 38 (-61.29%), from 62 to 24.
 
 #### Instruments allocation totals
 
@@ -440,17 +440,17 @@ Persistent bytes were still allocated at the end of the recording; transient byt
 
 | Metric | `main` | `dev-native-quadra` | Delta | Change |
 |---|---:|---:|---:|---:|
-| Persistent bytes | 2.41 GiB | 219.58 MiB | −2.19 GiB | -91.10% |
-| Transient bytes | 18.43 GiB | 632.20 MiB | −17.82 GiB | -96.65% |
-| Total recorded bytes | 20.84 GiB | 851.78 MiB | −20.01 GiB | -96.01% |
-| Persistent allocations | 62,656 | 46,308 | -16,348 | -26.09% |
-| Transient allocations | 1,185,449 | 461,530 | -723,919 | -61.07% |
-| Total allocations | 1,248,105 | 507,838 | -740,267 | -59.31% |
-| Allocation events | 2,431,266 | 969,286 | -1,461,980 | -60.13% |
+| Persistent bytes | 2.41 GiB | 219.62 MiB | −2.19 GiB | -91.10% |
+| Transient bytes | 18.44 GiB | 632.54 MiB | −17.82 GiB | -96.65% |
+| Total recorded bytes | 20.85 GiB | 852.16 MiB | −20.01 GiB | -96.01% |
+| Persistent allocations | 62,594 | 46,092 | -16,502 | -26.36% |
+| Transient allocations | 1,185,792 | 461,807 | -723,985 | -61.05% |
+| Total allocations | 1,248,386 | 507,899 | -740,487 | -59.32% |
+| Allocation events | 2,431,891 | 969,622 | -1,462,269 | -60.13% |
 
-- Persistent allocated memory decreased by 2.19 GiB (-91.10%), from 2.41 GiB to 219.58 MiB.
-- Transient allocated memory decreased by 17.82 GiB (-96.65%), from 18.43 GiB to 632.20 MiB.
-- Allocation events decreased by 1,461,980 (-60.13%), from 2,431,266 to 969,286.
+- Persistent allocated memory decreased by 2.19 GiB (-91.10%), from 2.41 GiB to 219.62 MiB.
+- Transient allocated memory decreased by 17.82 GiB (-96.65%), from 18.44 GiB to 632.54 MiB.
+- Allocation events decreased by 1,462,269 (-60.13%), from 2,431,891 to 969,622.
 
 #### Largest persistent-allocation category changes
 
@@ -460,12 +460,12 @@ Persistent bytes were still allocated at the end of the recording; transient byt
 | Malloc 512.00 MiB | 1.00 GiB | 0 B | −1.00 GiB | -100.00% |
 | Malloc 340.67 MiB | 681.34 MiB | 0 B | −681.34 MiB | -100.00% |
 | Malloc 256.00 MiB | 256.00 MiB | 0 B | −256.00 MiB | -100.00% |
+| VM: MALLOC_MEDIUM | 640.00 MiB | 384.00 MiB | −256.00 MiB | -40.00% |
 | Malloc 182.28 MiB | 182.28 MiB | 0 B | −182.28 MiB | -100.00% |
-| Malloc 8.00 KiB | 231.38 MiB | 179.30 MiB | −52.09 MiB | -22.51% |
+| Malloc 8.00 KiB | 231.32 MiB | 179.41 MiB | −51.91 MiB | -22.44% |
+| VM: MALLOC_SMALL | 264.00 MiB | 216.00 MiB | −48.00 MiB | -18.18% |
 | Malloc 2.69 MiB | 8.06 MiB | 0 B | −8.06 MiB | -100.00% |
-| Malloc 8.00 MiB | 8.00 MiB | 0 B | −8.00 MiB | -100.00% |
 | Malloc 4.00 MiB | 8.00 MiB | 0 B | −8.00 MiB | -100.00% |
-| VM: MALLOC_SMALL | 232.00 MiB | 224.00 MiB | −8.00 MiB | -3.45% |
 
 ### Run details
 
@@ -473,13 +473,13 @@ Persistent bytes were still allocated at the end of the recording; transient byt
 
 | Metric | Value |
 |---|---:|
-| Maximum resident set size | 5.31 GiB |
-| Peak memory footprint | 2.95 GiB |
-| Elapsed time | 14.77 s |
-| User CPU time | 13.60 s |
-| System CPU time | 1.05 s |
-| Page reclaims | 525,663 |
-| Page faults | 46 |
+| Maximum resident set size | 4.96 GiB |
+| Peak memory footprint | 2.99 GiB |
+| Elapsed time | 14.99 s |
+| User CPU time | 13.74 s |
+| System CPU time | 1.08 s |
+| Page reclaims | 546,868 |
+| Page faults | 62 |
 | Swaps | 0 |
 
 Raw profile: [macos_profile_main_0.10.0.9000.txt](macos_profile_main_0.10.0.9000.txt)
@@ -495,12 +495,12 @@ Open the `.trace` bundle in Instruments to inspect allocation lifetimes, persist
 
 | Metric | Value |
 |---|---:|
-| Maximum resident set size | 431.88 MiB |
-| Peak memory footprint | 359.71 MiB |
-| Elapsed time | 6.40 s |
-| User CPU time | 6.31 s |
-| System CPU time | 0.06 s |
-| Page reclaims | 31,538 |
+| Maximum resident set size | 489.28 MiB |
+| Peak memory footprint | 382.49 MiB |
+| Elapsed time | 6.44 s |
+| User CPU time | 6.35 s |
+| System CPU time | 0.07 s |
+| Page reclaims | 35,203 |
 | Page faults | 24 |
 | Swaps | 0 |
 
@@ -521,4 +521,3 @@ Open the `.trace` bundle in Instruments to inspect allocation lifetimes, persist
 - Instruments and the RSS profiler execute the model separately to avoid profiling the Instruments launcher itself.
 - The `.trace` bundle is the authoritative detailed allocation record; exported XML is provided for automation.
 - macOS and Massif results should be compared within their own profiler type, not directly across operating systems.
-

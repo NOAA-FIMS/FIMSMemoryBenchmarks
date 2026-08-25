@@ -11,6 +11,7 @@ cd "$REPO_ROOT"
 REF_FIRST="${REF_FIRST:-main}"
 REF_COMPARE="${REF_COMPARE:-xptr-refactor}"
 export FIMS_BENCHMARK_MODEL_SIZE="${MODEL_SIZE:-large}"
+export FIMS_BENCHMARK_BUILD_PROFILE="optimized-O2-with-symbols"
 SUMMARY_ARGS=()
 CPU_SUMMARY_ARGS=()
 VALIDATION_ARGS=()
@@ -21,7 +22,7 @@ run_ref() {
   local base_out_file="$2"
 
   echo "=== Installing FIMS branch: $ref ==="
-  FIMS_REF="$ref" Rscript -e "source(file.path('R', 'setup_FIMS.R')); install_fims_debug(Sys.getenv('FIMS_REF'))"
+  FIMS_REF="$ref" Rscript -e "source(file.path('R', 'setup_FIMS.R')); install_fims_profile(Sys.getenv('FIMS_REF'))"
 
   local fims_version
   fims_version=$(Rscript -e "cat(as.character(packageVersion('FIMS')))")
@@ -192,9 +193,15 @@ Rscript "$REPO_ROOT/R/final_report.R" \
   "$FINAL_REPORT_FILE" "$REPORT_FILE" "$CPU_REPORT_FILE" \
   "$VALIDATION_REPORT_FILE" "${VALIDATION_ARGS[@]}"
 
+MANAGEMENT_REPORT_FILE="$OUTPUT_DIR/management_summary.md"
+Rscript "$REPO_ROOT/R/management_summary.R" \
+  "$MANAGEMENT_REPORT_FILE" "$REPORT_FILE" \
+  "$VALIDATION_REPORT_FILE" "${VALIDATION_ARGS[@]}"
+
 echo "======================================"
 echo "Memory profile outputs written to $OUTPUT_DIR"
 echo "Markdown summary: $REPORT_FILE"
 echo "CPU summary: $CPU_REPORT_FILE"
 echo "Joint validation summary: $VALIDATION_REPORT_FILE"
 echo "Combined final report: $FINAL_REPORT_FILE"
+echo "Management summary: $MANAGEMENT_REPORT_FILE"

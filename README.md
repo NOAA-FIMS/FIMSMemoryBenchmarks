@@ -7,23 +7,26 @@ A repository to benchmark and compare the memory footprint of NOAA-FIMS/FIMS bui
 - `/R`: Helper R scripts for setup and benchmark stage execution.
 - `/scripts`: Shell runners for memory profiling tools.
 - `/outputs`: Benchmark and profiler outputs (`.gitkeep` included).
-- `/.devcontainer`: Codespaces setup for debug-safe R compilation flags.
+- `/.devcontainer`: Codespaces setup for reproducible profiling builds.
 
-## Debug Build Configuration in Codespaces
+## Optimized Profiling Build Configuration
 
-This repository includes `.devcontainer/postCreate.sh`, which configures `~/.R/Makevars` with:
+Benchmarks use the repository-owned `config/Makevars.profile` with:
 
-- `PKG_CXXFLAGS += -g -O0 -fno-omit-frame-pointer -fvisibility=default`
-- `PKG_STRIP = true`
+- `-O2` optimization
+- `-g` symbols for native profilers
+- `-fno-omit-frame-pointer` for reliable stack unwinding
 
-These settings preserve symbols and frame pointers for profiler-friendly builds.
+The runner sets `R_MAKEVARS_USER` only while installing FIMS, so results do not
+depend on a developer's personal Makevars file. `DEVTOOLS_LOAD=1` prevents the
+FIMS package from selecting its install-time stripping/LTO configuration.
 
-## Install FIMS in Debug Mode
+## Install FIMS for Profiling
 
 `R/setup_FIMS` provides:
 
 ```r
-install_fims_debug(ref = "main")
+install_fims_profile(ref = "main")
 ```
 
 It installs `NOAA-FIMS/FIMS` from GitHub for a chosen branch/tag/commit using source compilation.
@@ -89,6 +92,8 @@ Each run generates:
   objective/gradient evaluation counts.
 - A combined `final_report.md` with the model description, side-by-side
   parameter estimates, joint validation, CPU profile, and memory profile.
+- A one-page `management_summary.md` with decision-relevant findings,
+  validation evidence, performance highlights, and build caveats.
 
 Both Markdown reports include a metric-by-metric branch comparison with absolute
 and percentage deltas. When Instruments statistics are available, the macOS

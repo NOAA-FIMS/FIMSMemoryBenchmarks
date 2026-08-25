@@ -1,15 +1,26 @@
-#' Install a specific FIMS branch compiled in Debug Mode
+#' Install a specific FIMS branch with optimized profiling flags
 #'
 #' @param ref Branch name, tag, or commit hash (e.g. "main", "xptr-refactor")
-install_fims_debug <- function(ref = "main") {
-  message(sprintf("Installing NOAA-FIMS/FIMS@%s in debug mode...", ref))
+#' @param makevars Path to the reproducible profiling Makevars file.
+install_fims_profile <- function(
+    ref = "main",
+    makevars = file.path(getwd(), "config", "Makevars.profile")) {
+  makevars <- normalizePath(makevars, mustWork = TRUE)
+  message(sprintf("Installing NOAA-FIMS/FIMS@%s with optimized profiling flags...", ref))
 
   # Ensure remotes is available
   if (!requireNamespace("remotes", quietly = TRUE)) {
     install.packages("remotes")
   }
 
-  # Force compilation from source with user's ~/.R/Makevars applied
+  old_makevars <- Sys.getenv("R_MAKEVARS_USER", unset = NA_character_)
+  old_devtools_load <- Sys.getenv("DEVTOOLS_LOAD", unset = NA_character_)
+  on.exit({
+    if (is.na(old_makevars)) Sys.unsetenv("R_MAKEVARS_USER") else Sys.setenv(R_MAKEVARS_USER = old_makevars)
+    if (is.na(old_devtools_load)) Sys.unsetenv("DEVTOOLS_LOAD") else Sys.setenv(DEVTOOLS_LOAD = old_devtools_load)
+  }, add = TRUE)
+  Sys.setenv(R_MAKEVARS_USER = makevars, DEVTOOLS_LOAD = "1")
+
   remotes::install_github(
     repo = "NOAA-FIMS/FIMS",
     ref = ref,
@@ -18,6 +29,9 @@ install_fims_debug <- function(ref = "main") {
     INSTALL_opts = c("--no-multiarch")
   )
 }
+
+# Backward-compatible alias for older scripts.
+install_fims_debug <- install_fims_profile
 
 expand_fims_years <- function(data, n_years) {
   base_years <- max(data$timing[data$type == "catch"], na.rm = TRUE)
@@ -369,6 +383,9 @@ setup_fims_model <- function(mode = c(
       canonical_final_gradient[log_slope] / canonical_final[log_slope]
     return(list(
       backend = if (quadra_backend == "none") "TMB" else quadra_backend,
+      build_profile = Sys.getenv(
+        "FIMS_BENCHMARK_BUILD_PROFILE", "unrecorded"
+      ),
       model_size = model_size,
       n_fixed = length(fixed),
       n_random = length(random),

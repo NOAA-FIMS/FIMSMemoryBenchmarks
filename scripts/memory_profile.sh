@@ -25,7 +25,7 @@ run_ref() {
   echo "=== Installing FIMS branch: $ref ==="
 
   # compile cleanly outside Valgrind
-  Rscript -e "source(file.path('R', 'setup_FIMS.R')); install_fims_debug('$ref')"
+  Rscript -e "source(file.path('R', 'setup_FIMS.R')); install_fims_profile('$ref')"
   
   # get the installed FIMS version
   local fims_version
