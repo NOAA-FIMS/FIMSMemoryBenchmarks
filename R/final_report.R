@@ -105,5 +105,12 @@ lines <- c(
   embed_report("CPU profile", cpu_report),
   embed_report("Memory profile", memory_report)
 )
+leak_report <- file.path(dirname(output), "leak_report.md")
+if (file.exists(leak_report)) {
+  lines <- c(lines, embed_report("Leak detection", leak_report))
+}
+while (length(lines) && identical(tail(lines, 1L), "")) {
+  lines <- head(lines, -1L)
+}
 writeLines(lines, output)
 cat("Combined final report written to", output, "\n")

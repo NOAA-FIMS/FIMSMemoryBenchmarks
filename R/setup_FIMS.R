@@ -15,10 +15,13 @@ install_fims_profile <- function(
 
   old_makevars <- Sys.getenv("R_MAKEVARS_USER", unset = NA_character_)
   old_devtools_load <- Sys.getenv("DEVTOOLS_LOAD", unset = NA_character_)
-  on.exit({
-    if (is.na(old_makevars)) Sys.unsetenv("R_MAKEVARS_USER") else Sys.setenv(R_MAKEVARS_USER = old_makevars)
-    if (is.na(old_devtools_load)) Sys.unsetenv("DEVTOOLS_LOAD") else Sys.setenv(DEVTOOLS_LOAD = old_devtools_load)
-  }, add = TRUE)
+  on.exit(
+    {
+      if (is.na(old_makevars)) Sys.unsetenv("R_MAKEVARS_USER") else Sys.setenv(R_MAKEVARS_USER = old_makevars)
+      if (is.na(old_devtools_load)) Sys.unsetenv("DEVTOOLS_LOAD") else Sys.setenv(DEVTOOLS_LOAD = old_devtools_load)
+    },
+    add = TRUE
+  )
   Sys.setenv(R_MAKEVARS_USER = makevars, DEVTOOLS_LOAD = "1")
 
   remotes::install_github(
@@ -74,11 +77,12 @@ setup_fims_model <- function(mode = c(
   mode <- match.arg(mode)
   model_size <- match.arg(model_size, c("medium", "large"))
   if (!is.numeric(inner_duration_seconds) ||
-      length(inner_duration_seconds) != 1L ||
-      is.na(inner_duration_seconds) ||
-      inner_duration_seconds < 0) {
+    length(inner_duration_seconds) != 1L ||
+    is.na(inner_duration_seconds) ||
+    inner_duration_seconds < 0) {
     stop("`inner_duration_seconds` must be one non-negative number.",
-         call. = FALSE)
+      call. = FALSE
+    )
   }
 
   # Map modes to execution depths
@@ -285,20 +289,23 @@ setup_fims_model <- function(mode = c(
     random <- get_random()
     start <- c(fixed, random)
     fixed_name_function <- get0(
-      "native_get_parameter_names", envir = fims_namespace,
+      "native_get_parameter_names",
+      envir = fims_namespace,
       mode = "function", inherits = FALSE
     )
     fixed_names <- if (is.function(fixed_name_function)) {
       fixed_name_function()
     } else {
       named_fixed <- get0(
-        "get_parameter_names", envir = fims_namespace,
+        "get_parameter_names",
+        envir = fims_namespace,
         mode = "function", inherits = FALSE
       )(fixed)
       names(named_fixed)
     }
     random_name_function <- get0(
-      "get_random_names", envir = fims_namespace,
+      "get_random_names",
+      envir = fims_namespace,
       mode = "function", inherits = FALSE
     )
     random_names <- names(random_name_function(random))
@@ -309,7 +316,7 @@ setup_fims_model <- function(mode = c(
       random_names <- paste0("random_effect_", seq_along(random))
     }
     if (length(random) == model_years - 1L &&
-        all(grepl("^random_effect_", random_names))) {
+      all(grepl("^random_effect_", random_names))) {
       random_names <- paste0(
         "Recruitment.1.log_devs.", seq.int(2L, model_years)
       )
@@ -444,10 +451,12 @@ setup_fims_model <- function(mode = c(
     } else if (quadra_backend == "legacy") {
       fixed <- get_fixed()
       random <- get_random()
-      function() EvaluateQuadraModel(
-        fixed_values = fixed,
-        random_values = random
-      )
+      function() {
+        EvaluateQuadraModel(
+          fixed_values = fixed,
+          random_values = random
+        )
+      }
     } else {
       function() {
         obj$fn()
@@ -460,7 +469,7 @@ setup_fims_model <- function(mode = c(
       evaluate_inner()
       evaluations <- evaluations + 1L
       if (inner_duration_seconds == 0 ||
-          proc.time()[["elapsed"]] - started >= inner_duration_seconds) {
+        proc.time()[["elapsed"]] - started >= inner_duration_seconds) {
         break
       }
     }

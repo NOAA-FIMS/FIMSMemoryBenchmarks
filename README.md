@@ -93,17 +93,20 @@ Each run generates:
 - A combined `final_report.md` with the model description, side-by-side
   parameter estimates, joint validation, CPU profile, and memory profile.
 - A one-page `management_summary.md` with decision-relevant findings,
-  validation evidence, performance highlights, and build caveats.
+  validation evidence, performance highlights, and the recorded build profile.
 
 Both Markdown reports include a metric-by-metric branch comparison with absolute
 and percentage deltas. When Instruments statistics are available, the macOS
 report also compares persistent and transient allocation totals and highlights
-the ten allocation categories with the largest persistent-memory changes.
+the ten allocation categories with the largest persistent-memory changes. It
+also attributes persistent bytes for both branches to TMB/TMBad, Quadra, Rcpp,
+the R runtime, FIMS C++, or system/unresolved symbols.
 
 On Linux, child processes are profiled separately. The Markdown summary uses
 the process with the highest total peak for each ref and lists all process
-profiles. Use `ms_print` on an individual `.out.<pid>` file to inspect its
-allocation tree.
+profiles. It classifies leaf bytes from the peak Massif allocation tree into
+the same origin groups using each allocation's complete stack path. Use
+`ms_print` on an individual `.out.<pid>` file to inspect its allocation tree.
 
 The macOS report compares maximum resident set size and also records Apple's
 peak-memory-footprint metric, timing, paging, and swap data. These physical-memory
@@ -128,3 +131,32 @@ for unusually slow hosts or long benchmarks with
 
 CPU profiling is enabled by default. Set `CPU_PROFILE=0` to skip it. Linux hosts
 need the platform's `perf` package and permission to collect performance events.
+
+Each branch's validation run now records total wall-clock runtime in
+`joint_validation_<ref>_<version>.rds.runtime_seconds`. A monotonic timer wraps
+the entire R process, including startup, package loading, model/tape setup,
+initial evaluation, joint optimization, final evaluation, and saving results.
+Branch installation and the separate profiling runs are excluded. The joint
+validation, final, and management reports show total runtime alongside the
+optimization-only timing. Older runs show `Not recorded` for total runtime;
+their separate memory-workload timings cannot supply this measurement.
+
+Leak detection runs separately for each branch by default (`LEAK_CHECK=0` disables
+it). macOS uses `leaks --atExit` with allocation stack logging; Linux uses Valgrind
+Memcheck with full leak checking. Each runs the joint-validation workload,
+collects R garbage, and checks at exit. Detector overhead is excluded from the
+total runtime measurement. This can substantially increase benchmark duration.
+`leak_report.md`, the final report, and the management summary show the status
+and detected bytes, with per-branch JSON records and raw logs for allocation
+stacks. Failed or unavailable checks are explicitly distinguished from zero
+detected leaks. Reports include allocations from R and dependencies, and do not
+treat still-reachable memory as a leak or prove absence of repeated-run growth.
+
+Leak reports also summarize allocation origins (TMB/TMBad, Quadra, Rcpp, R,
+FIMS with an unspecified backend, or system/other/unresolved). They show the
+largest leak records, allocation callers, source locations when symbols provide
+them, and raw-log line numbers. Per-branch JSON retains full parsed stacks.
+Attribution uses the nearest recognizable allocation caller; it does not prove
+which component lost ownership. Parsed byte coverage is checked against detector
+totals, and unavailable stacks remain explicit. Memcheck's combined direct and
+indirect totals are separated to avoid counting indirect losses twice.

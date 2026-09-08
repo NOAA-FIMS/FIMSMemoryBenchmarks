@@ -1,6 +1,6 @@
 # FIMS Benchmark Final Report
 
-Generated: `2026-08-25 00:09:47 UTC`
+Generated: `2026-08-25 00:25:24 UTC`
 
 ## Model
 
@@ -397,8 +397,8 @@ Each branch is sampled in a separate model run after its FIMS build is installed
 Source report: [macos_memory_report.md](macos_memory_report.md)
 
 
-Generated: `2026-08-25T00:09:47+00:00`
-Host: `macOS 15.7.7 (arm64)`  
+Generated: `2026-08-25T00:25:08+00:00`
+Host: `macOS 15.7.7 (arm64)`
 Profilers: Instruments Allocations and `/usr/bin/time -l`
 
 ### Summary
@@ -467,6 +467,19 @@ Persistent bytes were still allocated at the end of the recording; transient byt
 | Malloc 2.69 MiB | 8.06 MiB | 0 B | −8.06 MiB | -100.00% |
 | Malloc 4.00 MiB | 8.00 MiB | 0 B | −8.00 MiB | -100.00% |
 
+#### Persistent allocation origins
+
+Instruments attributes allocations still live at the end of each recording to the most specific exported responsible symbol. Generic C++ allocations in `FIMS.so` are kept separate when the export does not identify the backend.
+
+| Origin | `main` bytes | Share | `dev-native-quadra` bytes | Share |
+|---|---:|---:|---:|---:|
+| TMB/TMBad | 801.38 MiB | 32.49% | 4.84 KiB | 0.00% |
+| Quadra | 0 B | 0.00% | 2.52 KiB | 0.00% |
+| Rcpp | 204.03 KiB | 0.01% | 0 B | 0.00% |
+| R runtime | 236.50 MiB | 9.59% | 175.72 MiB | 80.01% |
+| FIMS C++ (backend not explicit) | 1.35 GiB | 56.07% | 39.67 KiB | 0.02% |
+| System/other/unresolved | 45.46 MiB | 1.84% | 43.85 MiB | 19.96% |
+
 ### Run details
 
 #### `main` (FIMS 0.10.0.9000)
@@ -484,9 +497,10 @@ Persistent bytes were still allocated at the end of the recording; transient byt
 
 Raw profile: [macos_profile_main_0.10.0.9000.txt](macos_profile_main_0.10.0.9000.txt)
 
-Instruments trace: [instruments_allocations_main_0.10.0.9000.trace](instruments_allocations_main_0.10.0.9000.trace)  
-Trace table of contents: [instruments_allocations_main_0.10.0.9000_toc.xml](instruments_allocations_main_0.10.0.9000_toc.xml)  
+Instruments trace: [instruments_allocations_main_0.10.0.9000.trace](instruments_allocations_main_0.10.0.9000.trace)
+Trace table of contents: [instruments_allocations_main_0.10.0.9000_toc.xml](instruments_allocations_main_0.10.0.9000_toc.xml)
 Allocation statistics: [instruments_allocations_main_0.10.0.9000_statistics.xml](instruments_allocations_main_0.10.0.9000_statistics.xml)
+Allocation origins: [instruments_allocations_main_0.10.0.9000_allocations.xml](instruments_allocations_main_0.10.0.9000_allocations.xml)
 Instruments log: [instruments_allocations_main_0.10.0.9000.log](instruments_allocations_main_0.10.0.9000.log)
 
 Open the `.trace` bundle in Instruments to inspect allocation lifetimes, persistent versus transient allocations, types, and recorded stack traces.
@@ -506,9 +520,10 @@ Open the `.trace` bundle in Instruments to inspect allocation lifetimes, persist
 
 Raw profile: [macos_profile_dev-native-quadra_0.10.0.9000.txt](macos_profile_dev-native-quadra_0.10.0.9000.txt)
 
-Instruments trace: [instruments_allocations_dev-native-quadra_0.10.0.9000.trace](instruments_allocations_dev-native-quadra_0.10.0.9000.trace)  
-Trace table of contents: [instruments_allocations_dev-native-quadra_0.10.0.9000_toc.xml](instruments_allocations_dev-native-quadra_0.10.0.9000_toc.xml)  
+Instruments trace: [instruments_allocations_dev-native-quadra_0.10.0.9000.trace](instruments_allocations_dev-native-quadra_0.10.0.9000.trace)
+Trace table of contents: [instruments_allocations_dev-native-quadra_0.10.0.9000_toc.xml](instruments_allocations_dev-native-quadra_0.10.0.9000_toc.xml)
 Allocation statistics: [instruments_allocations_dev-native-quadra_0.10.0.9000_statistics.xml](instruments_allocations_dev-native-quadra_0.10.0.9000_statistics.xml)
+Allocation origins: [instruments_allocations_dev-native-quadra_0.10.0.9000_allocations.xml](instruments_allocations_dev-native-quadra_0.10.0.9000_allocations.xml)
 Instruments log: [instruments_allocations_dev-native-quadra_0.10.0.9000.log](instruments_allocations_dev-native-quadra_0.10.0.9000.log)
 
 Open the `.trace` bundle in Instruments to inspect allocation lifetimes, persistent versus transient allocations, types, and recorded stack traces.

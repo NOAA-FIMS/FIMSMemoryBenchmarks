@@ -15,6 +15,7 @@ export FIMS_BENCHMARK_BUILD_PROFILE="optimized-O2-with-symbols"
 SUMMARY_ARGS=()
 CPU_SUMMARY_ARGS=()
 VALIDATION_ARGS=()
+LEAK_ARGS=()
 HOST_OS="$(uname -s)"
 
 run_ref() {
@@ -31,13 +32,18 @@ run_ref() {
   local validation_out="$OUTPUT_DIR/joint_validation_${ref_safe}_${fims_version}.rds"
   echo "=== Running joint output validation -> $validation_out ==="
   REPO_ROOT="$REPO_ROOT" VALIDATION_OUT="$validation_out" \
+    python3 "$REPO_ROOT/scripts/time_command.py" --output "${validation_out}.runtime_seconds" -- \
     Rscript -e "source(file.path(Sys.getenv('REPO_ROOT'), 'R', 'setup_FIMS.R')); saveRDS(setup_fims_model(mode = 'validation'), Sys.getenv('VALIDATION_OUT'))"
   VALIDATION_ARGS+=("$ref" "$validation_out")
+  local leak_out="$OUTPUT_DIR/leaks_${ref_safe}_${fims_version}.json"
+  python3 "$REPO_ROOT/scripts/check_leaks.py" --ref "$ref" --output "$leak_out"
+  LEAK_ARGS+=("$leak_out")
   if [[ "$HOST_OS" == "Darwin" ]]; then
     local native_out="$OUTPUT_DIR/macos_profile_${ref_safe}_${fims_version}.txt"
     local trace_out="$OUTPUT_DIR/instruments_allocations_${ref_safe}_${fims_version}.trace"
     local trace_toc="$OUTPUT_DIR/instruments_allocations_${ref_safe}_${fims_version}_toc.xml"
     local trace_stats="$OUTPUT_DIR/instruments_allocations_${ref_safe}_${fims_version}_statistics.xml"
+    local trace_allocations="$OUTPUT_DIR/instruments_allocations_${ref_safe}_${fims_version}_allocations.xml"
     local trace_log="$OUTPUT_DIR/instruments_allocations_${ref_safe}_${fims_version}.log"
     local trace_status="not-requested"
     local cpu_trace="$OUTPUT_DIR/instruments_cpu_${ref_safe}_${fims_version}.trace"
@@ -72,6 +78,13 @@ run_ref() {
           --output "$trace_stats"; then
           trace_status="captured-export-failed"
           echo "Warning: Instruments trace was captured, but allocation statistics could not be exported." >&2
+        fi
+        if ! xctrace export \
+          --input "$trace_out" \
+          --xpath '/trace-toc/run[@number="1"]/tracks/track[@name="Allocations"]/details/detail[@name="Allocations List"]' \
+          --output "$trace_allocations"; then
+          trace_status="captured-export-failed"
+          echo "Warning: Instruments trace was captured, but allocation origins could not be exported." >&2
         fi
       else
         trace_status="failed"
@@ -189,6 +202,8 @@ else
 fi
 
 FINAL_REPORT_FILE="$OUTPUT_DIR/final_report.md"
+python3 "$REPO_ROOT/scripts/check_leaks.py" --report "${LEAK_ARGS[@]}" \
+  --output "$OUTPUT_DIR/leak_report.md"
 Rscript "$REPO_ROOT/R/final_report.R" \
   "$FINAL_REPORT_FILE" "$REPORT_FILE" "$CPU_REPORT_FILE" \
   "$VALIDATION_REPORT_FILE" "${VALIDATION_ARGS[@]}"

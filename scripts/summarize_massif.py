@@ -7,6 +7,7 @@ import argparse
 import datetime as dt
 import glob
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -23,6 +24,8 @@ class Profile:
     peak_heap: int = 0
     peak_extra: int = 0
     peak_stacks: int = 0
+    peak_origins: dict[str, int] | None = None
+    peak_attributed_heap: int = 0
 
     @property
     def peak_total(self) -> int:
@@ -44,6 +47,44 @@ class Run:
 def parse_massif(path: Path) -> Profile:
     profile = Profile(path=path)
     current: dict[str, int] = {}
+    tree_lines: list[str] = []
+
+    def origin(stack: str) -> str:
+        symbol = stack.lower()
+        if "quadra" in symbol:
+            return "Quadra"
+        if "tmbad" in symbol or re.search(r"\btmb(?:::|\b)", symbol):
+            return "TMB/TMBad"
+        if "rcpp" in symbol:
+            return "Rcpp"
+        if re.search(r"\b(rf_|r_|libr(?:\.so)?\b)", symbol):
+            return "R runtime"
+        if "fims" in symbol:
+            return "FIMS C++ (backend not explicit)"
+        return "System/other/unresolved"
+
+    def parse_tree() -> tuple[dict[str, int], int]:
+        origins: dict[str, int] = {}
+        attributed = 0
+        ancestors: list[tuple[int, str]] = []
+        for line in tree_lines:
+            match = re.match(r"^(\s*)n(\d+):\s+(\d+)\s+(.*)$", line)
+            if not match:
+                continue
+            indent = len(match.group(1))
+            child_count = int(match.group(2))
+            size = int(match.group(3))
+            frame = match.group(4)
+            while ancestors and ancestors[-1][0] >= indent:
+                ancestors.pop()
+            stack = " ".join(item[1] for item in ancestors) + " " + frame
+            if child_count == 0:
+                category = origin(stack)
+                origins[category] = origins.get(category, 0) + size
+                attributed += size
+            else:
+                ancestors.append((indent, frame))
+        return origins, attributed
 
     def finish_snapshot() -> None:
         if "snapshot" not in current:
@@ -56,6 +97,7 @@ def parse_massif(path: Path) -> Profile:
             profile.peak_heap = current.get("mem_heap_B", 0)
             profile.peak_extra = current.get("mem_heap_extra_B", 0)
             profile.peak_stacks = current.get("mem_stacks_B", 0)
+            profile.peak_origins, profile.peak_attributed_heap = parse_tree()
 
     with path.open(encoding="utf-8", errors="replace") as stream:
         for raw_line in stream:
@@ -67,6 +109,9 @@ def parse_massif(path: Path) -> Profile:
             elif line.startswith("snapshot="):
                 finish_snapshot()
                 current = {"snapshot": int(line.split("=", 1)[1])}
+                tree_lines = []
+            elif re.match(r"^\s*n\d+:\s+\d+\s+", line):
+                tree_lines.append(line)
             elif "=" in line:
                 key, value = line.split("=", 1)
                 if key in {"time", "mem_heap_B", "mem_heap_extra_B", "mem_stacks_B"}:
@@ -185,6 +230,34 @@ def render(runs: list[Run], report_path: Path) -> str:
             f"- {describe_bytes('Stack memory at peak', first.peak_stacks, second.peak_stacks)}",
         ])
 
+        if first.peak_origins and second.peak_origins:
+            origins = (
+                "TMB/TMBad", "Quadra", "Rcpp", "R runtime",
+                "FIMS C++ (backend not explicit)", "System/other/unresolved",
+            )
+            lines.extend([
+                "", "### Peak heap allocation origins", "",
+                "Massif allocation-tree leaves are classified using their complete stack path "
+                "at the peak snapshot. Leaf bytes are counted once, avoiding parent-node double counting.",
+                "",
+                f"| Origin | `{baseline.ref}` bytes | Share | `{comparison.ref}` bytes | Share |",
+                "|---|---:|---:|---:|---:|",
+            ])
+            for origin in origins:
+                first_value = first.peak_origins.get(origin, 0)
+                second_value = second.peak_origins.get(origin, 0)
+                first_share = first_value / first.peak_attributed_heap * 100 if first.peak_attributed_heap else 0
+                second_share = second_value / second.peak_attributed_heap * 100 if second.peak_attributed_heap else 0
+                lines.append(
+                    f"| {origin} | {human_bytes(first_value)} | {first_share:.2f}% | "
+                    f"{human_bytes(second_value)} | {second_share:.2f}% |"
+                )
+            lines.extend([
+                "",
+                f"Attributed peak-tree bytes: {human_bytes(first.peak_attributed_heap)} for `{baseline.ref}` "
+                f"and {human_bytes(second.peak_attributed_heap)} for `{comparison.ref}`.",
+            ])
+
     lines.extend(["", "## Run details", ""])
     for run in runs:
         lines.extend([f"### `{run.ref}` (FIMS {run.version})", ""])
@@ -213,6 +286,7 @@ def render(runs: list[Run], report_path: Path) -> str:
         "- Compare peaks only when both branches ran the same model, stage, inputs, and Valgrind options.",
         "- `Heap overhead` is Massif's estimate of allocator bookkeeping and alignment costs.",
         "- `Stacks` is zero unless Massif stack profiling is enabled with `--stacks=yes`.",
+        "- Allocation origins use leaf bytes from the peak snapshot's complete stack paths.",
         "- Use `ms_print <massif-output-file>` for the allocation tree and snapshot graph.",
         "",
     ])

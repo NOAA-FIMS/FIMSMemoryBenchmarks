@@ -81,8 +81,20 @@ if (!is.null(second)) {
   )
 }
 
+validation_lines <- readLines(validation_report, warn = FALSE)
+runtime_start <- match("## Runtime summary", validation_lines)
+if (!is.na(runtime_start)) {
+  runtime_end <- runtime_start + 1L
+  while (runtime_end <= length(validation_lines) &&
+         !grepl("^## ", validation_lines[[runtime_end]])) {
+    runtime_end <- runtime_end + 1L
+  }
+  lines <- c(lines, "", validation_lines[seq.int(runtime_start, runtime_end - 1L)])
+}
+
 if (length(memory_table)) {
-  lines <- c(lines, "", "## Performance and memory", "", memory_table)
+  lines <- c(lines, "", "## Separate memory workload", "",
+    "Memory-profile elapsed time covers a separate `inner` process, with different random-effect treatments between backends; it is not total joint-validation runtime.", "", memory_table)
 }
 
 lines <- c(
@@ -105,5 +117,15 @@ lines <- c(
   paste0("- [Joint validation report](", basename(validation_report), ")"),
   paste0("- [Memory profile report](", basename(memory_report), ")")
 )
+leak_report <- file.path(dirname(output), "leak_report.md")
+if (file.exists(leak_report)) {
+  leak_lines <- readLines(leak_report, warn = FALSE)
+  origin_start <- grep("^## Allocation origins:", leak_lines)
+  if (length(origin_start)) leak_lines <- head(leak_lines, origin_start[[1L]] - 1L)
+  lines <- c(lines, "", "## Leak detection", "",
+    "Separate joint-validation runs check for leaks at process exit. Results include R and dependencies; inspect raw stacks before attributing leaks to FIMS.", "",
+    leak_lines[grepl("^\\|", leak_lines)], "",
+    "Details: [Leak detection report](leak_report.md)")
+}
 writeLines(lines, output)
 cat("Management summary written to", output, "\n")

@@ -34,6 +34,7 @@ class Run:
     trace_status: str
     trace_path: Path
     allocations: dict[str, dict[str, int]]
+    allocation_origins: dict[str, dict[str, int]]
 
 
 def parse_profile(path: Path) -> Profile:
@@ -81,6 +82,42 @@ def parse_allocation_stats(trace_path: Path) -> dict[str, dict[str, int]]:
                 "count-persistent", "count-transient", "count-total", "count-events",
             )
         }
+    return result
+
+
+def allocation_origin(caller: str, library: str) -> str:
+    """Classify an allocation by its most specific exported responsible symbol."""
+    symbol = f"{caller} {library}".lower()
+    if "quadra" in symbol:
+        return "Quadra"
+    if "tmbad" in symbol or re.search(r"\btmb(?:::|\b)", symbol):
+        return "TMB/TMBad"
+    if "rcpp" in symbol:
+        return "Rcpp"
+    if library == "libR.dylib" or re.match(r"^(Rf_|R_|[A-Z]+(?:_|$))", caller):
+        return "R runtime"
+    if "fims" in symbol:
+        return "FIMS C++ (backend not explicit)"
+    return "System/other/unresolved"
+
+
+def parse_allocation_origins(trace_path: Path) -> dict[str, dict[str, int]]:
+    allocations_path = trace_path.with_name(trace_path.stem + "_allocations.xml")
+    if not allocations_path.exists():
+        return {}
+    result: dict[str, dict[str, int]] = {}
+    try:
+        rows = ET.parse(allocations_path).getroot().iter("row")
+        for row in rows:
+            size = int(row.get("size", "0"))
+            caller = row.get("responsible-caller", "")
+            library = row.get("responsible-library", "")
+            origin = allocation_origin(caller, library)
+            values = result.setdefault(origin, {"bytes": 0, "count": 0})
+            values["bytes"] += size
+            values["count"] += 1
+    except (ET.ParseError, OSError, ValueError):
+        return {}
     return result
 
 
@@ -149,8 +186,8 @@ def render(runs: list[Run], output: Path) -> str:
     lines = [
         "# FIMS macOS Native Memory Benchmark Report",
         "",
-        f"Generated: `{generated}`  ",
-        f"Host: `macOS {mac_version} ({platform.machine()})`  ",
+        f"Generated: `{generated}`",
+        f"Host: `macOS {mac_version} ({platform.machine()})`",
         "Profilers: Instruments Allocations and `/usr/bin/time -l`",
         "",
         "## Summary",
@@ -274,11 +311,38 @@ def render(runs: list[Run], output: Path) -> str:
                         f"{signed_bytes(first_value, second_value)} | {percent_delta(first_value, second_value)} |"
                     )
 
+        if baseline.allocation_origins and comparison.allocation_origins:
+            origins = (
+                "TMB/TMBad", "Quadra", "Rcpp", "R runtime",
+                "FIMS C++ (backend not explicit)", "System/other/unresolved",
+            )
+            first_total = sum(item["bytes"] for item in baseline.allocation_origins.values())
+            second_total = sum(item["bytes"] for item in comparison.allocation_origins.values())
+            lines.extend([
+                "", "### Persistent allocation origins", "",
+                "Instruments attributes allocations still live at the end of each recording "
+                "to the most specific exported responsible symbol. Generic C++ allocations "
+                "in `FIMS.so` are kept separate when the export does not identify the backend.",
+                "",
+                f"| Origin | `{baseline.ref}` bytes | Share | `{comparison.ref}` bytes | Share |",
+                "|---|---:|---:|---:|---:|",
+            ])
+            for origin in origins:
+                first_value = baseline.allocation_origins.get(origin, {}).get("bytes", 0)
+                second_value = comparison.allocation_origins.get(origin, {}).get("bytes", 0)
+                first_share = first_value / first_total * 100 if first_total else 0
+                second_share = second_value / second_total * 100 if second_total else 0
+                lines.append(
+                    f"| {origin} | {human_bytes(first_value)} | {first_share:.2f}% | "
+                    f"{human_bytes(second_value)} | {second_share:.2f}% |"
+                )
+
     lines.extend(["", "## Run details", ""])
     for run in runs:
         item = run.profile
         toc_path = run.trace_path.with_name(run.trace_path.stem + "_toc.xml")
         stats_path = run.trace_path.with_name(run.trace_path.stem + "_statistics.xml")
+        allocations_path = run.trace_path.with_name(run.trace_path.stem + "_allocations.xml")
         log_path = run.trace_path.with_suffix(".log")
         lines.extend([
             f"### `{run.ref}` (FIMS {run.version})",
@@ -299,12 +363,14 @@ def render(runs: list[Run], output: Path) -> str:
         ])
         if run.trace_status.startswith("captured"):
             lines.append(
-                f"Instruments trace: [{escape(run.trace_path.name)}]({escape(run.trace_path.name)})  "
+                f"Instruments trace: [{escape(run.trace_path.name)}]({escape(run.trace_path.name)})"
             )
             if toc_path.exists():
-                lines.append(f"Trace table of contents: [{escape(toc_path.name)}]({escape(toc_path.name)})  ")
+                lines.append(f"Trace table of contents: [{escape(toc_path.name)}]({escape(toc_path.name)})")
             if stats_path.exists():
                 lines.append(f"Allocation statistics: [{escape(stats_path.name)}]({escape(stats_path.name)})")
+            if allocations_path.exists():
+                lines.append(f"Allocation origins: [{escape(allocations_path.name)}]({escape(allocations_path.name)})")
             if log_path.exists():
                 lines.append(f"Instruments log: [{escape(log_path.name)}]({escape(log_path.name)})")
             lines.extend([
@@ -336,7 +402,6 @@ def render(runs: list[Run], output: Path) -> str:
         "- Instruments and the RSS profiler execute the model separately to avoid profiling the Instruments launcher itself.",
         "- The `.trace` bundle is the authoritative detailed allocation record; exported XML is provided for automation.",
         "- macOS and Massif results should be compared within their own profiler type, not directly across operating systems.",
-        "",
     ])
     return "\n".join(lines)
 
@@ -361,6 +426,7 @@ def main() -> int:
             status,
             Path(trace_path),
             parse_allocation_stats(Path(trace_path)),
+            parse_allocation_origins(Path(trace_path)),
         )
         for ref, version, profile_path, status, trace_path in args.run
     ]

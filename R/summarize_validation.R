@@ -8,6 +8,14 @@ pairs <- matrix(args[-1L], ncol = 2L, byrow = TRUE)
 results <- lapply(seq_len(nrow(pairs)), function(index) {
   result <- readRDS(pairs[index, 2L])
   result$ref <- pairs[index, 1L]
+  runtime_path <- paste0(pairs[index, 2L], ".runtime_seconds")
+  result$total_runtime_seconds <- if (file.exists(runtime_path)) {
+    value <- scan(runtime_path, quiet = TRUE)
+    if (length(value) != 1L || !is.finite(value) || value < 0) {
+      stop("Invalid total runtime: ", runtime_path, call. = FALSE)
+    }
+    value
+  } else NA_real_
   result
 })
 
@@ -18,8 +26,18 @@ format_number <- function(value) {
 lines <- c(
   "# FIMS Joint Objective Validation", "",
   "Both branches use the same wrapper-built model, starting values, joint fixed/random objective, and `nlminb` controls.", "",
+  "## Runtime summary", "",
+  "Total runtime is wall-clock time from launching the validation R process until it exits, including startup, package loading, model and tape construction, initial evaluation, joint optimization, final evaluation, and saving results. It excludes branch installation and separate memory/CPU profiling runs. Optimization time measures only `nlminb`. Both branches use the joint objective for these timings. Historical runs without a timing record show 'Not recorded'; total runtime cannot be reconstructed by adding timings from separate runs.", "",
+  "| Git ref | Total runtime | Optimization only |",
+  "|---|---:|---:|"
+)
+for (result in results) {
+  total <- if (is.na(result$total_runtime_seconds)) "Not recorded" else sprintf("%.3f s", result$total_runtime_seconds)
+  lines <- c(lines, sprintf("| %s | %s | %.3f s |", result$ref, total, result$elapsed_seconds))
+}
+lines <- c(lines, "",
   "## Optimization summary", "",
-  "| Git ref | Backend | Fixed | Random | Initial objective | Final objective | Final gradient norm | Convergence | Iterations | Function evals | Gradient evals | Elapsed |",
+  "| Git ref | Backend | Fixed | Random | Initial objective | Final objective | Final gradient norm | Convergence | Iterations | Function evals | Gradient evals | Optimization elapsed |",
   "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
 )
 for (result in results) {
