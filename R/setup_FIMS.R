@@ -47,8 +47,7 @@ setup_fims_model <- function(mode = c("helper", "sd_report_clear", "sd_report",
   # Prepare the package data for being used in a FIMS model
   data_4_model <- FIMSFrame(data_big)
 
-  parameters_4_model <- create_default_configurations(data = data_4_model) |>
-    create_default_parameters(data = data_4_model) |>
+  parameters_4_model <- setup_default_parameters(data = data_4_model) |>
     tidyr::unnest(cols = data) |>
     # Update log_Fmort initial values for Fleet1
     dplyr::rows_update(
