@@ -3,11 +3,11 @@
   "image": "ghcr.io/rocker-org/devcontainer/r-ver:4.3",
   "features": {
     "ghcr.io/rocker-org/devcontainer-features/apt-packages:1": {
-      "packages": "g++,gcc,libelf-dev,libunwind-dev,libcap2-bin,google-perftools,libgoogle-perftools-dev,make,gdb,valgrind",
+      "packages": "g++,gcc,libelf-dev,libunwind-dev,libcap2-bin,google-perftools,linux-perf,libgoogle-perftools-dev,make,gdb,valgrind",
       "updatePackages": true
     },
     "ghcr.io/rocker-org/devcontainer-features/r-packages:1": {
-      "packages": "covr,dplyr,devtools,here,remotes,ggplot2,graphics,methods,Rcpp,RcppEigen,scales,snowfall,TMB,tibble,tidyr,usethis",
+      "packages": "bench,covr,dplyr,devtools,here,remotes,ggplot2,graphics,methods,Rcpp,RcppEigen,scales,snowfall,TMB,tibble,tidyr,usethis",
       "installSystemRequirements": true
     }
   },
