@@ -64,8 +64,8 @@ def render(runs, host):
         lines.append('  '.join(cell.ljust(width) for cell, width in zip(row, widths)).rstrip())
         if index == 0:
             lines.append('  '.join('-' * width for width in widths))
-    if len(values) == 2:
-        first, second = values
+    for second in values[1:]:
+        first = values[0]
         lines += ['', f'Change: {second[0]} relative to {first[0]}']
         for column, label, unit in [(1, 'Peak RSS', 'MiB'), (2, 'Total validation runtime', 's'),
                                     (3, 'Build peak process RSS', 'MiB'), (4, 'Leaked/lost bytes', 'B')]:

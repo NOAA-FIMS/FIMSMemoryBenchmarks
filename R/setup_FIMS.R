@@ -344,9 +344,10 @@ setup_fims_model <- function(mode = c(
       }
     }
     initial <- evaluate(start)
-    split_objective <- get0("quadra_objective", fims_namespace, mode = "function", inherits = FALSE)
-    split_gradient <- get0("quadra_gradient", fims_namespace, mode = "function", inherits = FALSE)
-    if (quadra_backend == "xptr" && is.function(split_objective) && is.function(split_gradient)) {
+    split_prefix <- if (quadra_backend == "native") "native_quadra_" else "quadra_"
+    split_objective <- get0(paste0(split_prefix, "objective"), fims_namespace, mode = "function", inherits = FALSE)
+    split_gradient <- get0(paste0(split_prefix, "gradient"), fims_namespace, mode = "function", inherits = FALSE)
+    if (quadra_backend %in% c("xptr", "native") && is.function(split_objective) && is.function(split_gradient)) {
       objective <- function(parameters) split_objective(
         fixed = parameters[seq_along(fixed)],
         random = parameters[length(fixed) + seq_along(random)]

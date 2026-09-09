@@ -186,13 +186,31 @@ run_ref() {
   fi
 }
 
-run_ref "$REF_FIRST" "$OUTPUT_DIR/valgrind_massif"
-
-if [[ "$REF_FIRST" == "$REF_COMPARE" ]]; then
-  echo "Warning: both refs are '$REF_FIRST'; skipping the duplicate run." >&2
+# Positional refs support any number of branches; environment defaults remain compatible.
+if [[ "$#" -gt 0 ]]; then
+  requested_refs=("$@")
 else
-  run_ref "$REF_COMPARE" "$OUTPUT_DIR/valgrind_massif"
+  requested_refs=("$REF_FIRST" "$REF_COMPARE")
 fi
+refs=()
+ref_keys=()
+for ref in "${requested_refs[@]}"; do
+  [[ -n "$ref" ]] || { echo "Empty ref is not allowed." >&2; exit 1; }
+  duplicate=0
+  for existing in "${refs[@]-}"; do
+    [[ "$existing" != "$ref" ]] || duplicate=1
+  done
+  [[ "$duplicate" == 0 ]] || continue
+  key="${ref//[^A-Za-z0-9._-]/_}"
+  for existing in "${ref_keys[@]-}"; do
+    [[ "$existing" != "$key" ]] || { echo "Ref filenames collide for $ref." >&2; exit 1; }
+  done
+  refs+=("$ref")
+  ref_keys+=("$key")
+done
+for ref in "${refs[@]}"; do
+  run_ref "$ref" "$OUTPUT_DIR/valgrind_massif"
+done
 
 CPU_REPORT_FILE="$OUTPUT_DIR/cpu_profile_report.md"
 python3 "$REPO_ROOT/scripts/summarize_cpu.py" \

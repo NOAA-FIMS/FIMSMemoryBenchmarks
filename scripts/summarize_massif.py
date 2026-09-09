@@ -191,8 +191,8 @@ def render(runs: list[Run], report_path: Path) -> str:
             )
 
     valid = [run for run in runs if run.primary is not None]
-    if len(valid) == 2:
-        baseline, comparison = valid
+    for comparison in valid[1:] if valid and valid[0] is runs[0] else []:
+        baseline = runs[0]
         baseline_peak = baseline.primary.peak_total  # type: ignore[union-attr]
         delta = comparison.primary.peak_total - baseline_peak  # type: ignore[union-attr]
         percent = (delta / baseline_peak * 100) if baseline_peak else 0.0
@@ -210,7 +210,7 @@ def render(runs: list[Run], report_path: Path) -> str:
         first = baseline.primary
         second = comparison.primary
         lines.extend([
-            "", "## Detailed branch comparison", "", comparison_text, "",
+            "", f"## Detailed branch comparison: {comparison.ref} vs {baseline.ref}", "", comparison_text, "",
             "Positive deltas mean the comparison ref used more memory; negative deltas mean less.",
             "",
             f"| Metric | `{baseline.ref}` | `{comparison.ref}` | Delta | Change |",

@@ -1,5 +1,5 @@
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) < 8L || length(args) %% 2L != 0L) {
+if (length(args) < 6L || length(args) %% 2L != 0L) {
   stop(
     "Expected OUTPUT MEMORY CPU VALIDATION followed by REF RESULT pairs.",
     call. = FALSE
@@ -57,7 +57,7 @@ lines <- c(
     first$n_fixed, first$n_random, random_years
   ),
   "",
-  "Observed components include fishing catch, survey index, age compositions, length compositions, weight at age, and age-to-length conversion. Both branches start from identical parameters and use the same joint objective and `nlminb` controls for validation.",
+  "Observed components include fishing catch, survey index, age compositions, length compositions, weight at age, and age-to-length conversion. Validation compares starting parameters across refs using the same joint objective and `nlminb` controls.",
   "", "## Estimated parameters", ""
 )
 

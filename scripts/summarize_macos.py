@@ -208,8 +208,8 @@ def render(runs: list[Run], output: Path) -> str:
         )
 
     comparable = [run for run in runs if run.profile.maximum_rss is not None]
-    if len(comparable) == 2:
-        baseline, comparison = comparable
+    for comparison in comparable[1:] if comparable and comparable[0] is runs[0] else []:
+        baseline = runs[0]
         base = baseline.profile.maximum_rss or 0
         other = comparison.profile.maximum_rss or 0
         delta = other - base
@@ -223,7 +223,7 @@ def render(runs: list[Run], output: Path) -> str:
                 f"than `{baseline.ref}` ({percent:+.2f}%)."
             )
         lines.extend([
-            "", "## Detailed branch comparison", "", sentence, "",
+            "", f"## Detailed branch comparison: {comparison.ref} vs {baseline.ref}", "", sentence, "",
             "Positive deltas mean the comparison ref used more of that metric; negative deltas mean less.",
             "",
             f"| Metric | `{baseline.ref}` | `{comparison.ref}` | Delta | Change |",

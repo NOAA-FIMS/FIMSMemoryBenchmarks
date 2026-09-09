@@ -1,5 +1,5 @@
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) < 7L || length(args) %% 2L != 1L) {
+if (length(args) < 5L || length(args) %% 2L != 1L) {
   stop(
     "Expected OUTPUT MEMORY VALIDATION followed by REF RESULT pairs.",
     call. = FALSE
@@ -35,50 +35,23 @@ if (!is.na(table_start)) {
 }
 
 first <- results[[1L]]
-second <- if (length(results) >= 2L) results[[2L]] else NULL
-build_profile <- first$build_profile
-if (is.null(build_profile)) build_profile <- "unrecorded"
-
 lines <- c(
-  "# Management Summary: FIMS Native Quadra Evaluation", "",
-  paste0("Prepared: `", format(Sys.time(), tz = "UTC", usetz = TRUE), "`"),
-  "", "## Bottom line", ""
+  "# Management Summary: FIMS Branch Comparison", "",
+  paste0("Prepared: `", format(Sys.time(), tz = "UTC", usetz = TRUE), "`"), "",
+  paste0("Baseline: `", first$ref, "`. Each other ref is compared with this baseline."), "",
+  "## Validation scorecard", "",
+  "| Ref | Backend | Final objective difference | Max parameter difference | Convergence code | Build profile |",
+  "|---|---|---:|---:|---:|---|"
 )
-
-if (!is.null(second)) {
-  order <- match(first$canonical_parameter_names, second$canonical_parameter_names)
-  comparable <- !anyNA(order)
-  initial_gradient_difference <- if (comparable) {
-    max(abs(
-      first$canonical_initial_gradient -
-        second$canonical_initial_gradient[order]
-    ))
-  } else {
-    NA_real_
-  }
-  final_parameter_difference <- if (comparable) {
-    max(abs(
-      first$canonical_final_parameters -
-        second$canonical_final_parameters[order]
-    ))
-  } else {
-    NA_real_
-  }
-  objective_difference <- abs(first$final_objective - second$final_objective)
-  lines <- c(
-    lines,
-    "- **Numerical results agree.** The two backends start from the same model and parameters and converge to effectively the same joint objective and estimates.",
-    "- **Native Quadra materially reduces memory use in the recorded run.** This is the strongest operational benefit observed so far.",
-    "- **The benchmark records a reproducible optimized build profile.** This makes the resulting performance comparison suitable for management review.",
-    "", "## Decision scorecard", "",
-    "| Question | Result |", "|---|---|",
-    sprintf("| Do the objective values agree? | Yes — final difference `%s` |", format_number(objective_difference)),
-    sprintf("| Do the initial gradients agree? | Yes — maximum difference `%s` |", format_number(initial_gradient_difference)),
-    sprintf("| Do the estimated parameters agree? | Yes — maximum difference `%s` |", format_number(final_parameter_difference)),
-    sprintf("| Did both optimizations converge? | %s |", if (first$convergence == 0L && second$convergence == 0L) "Yes" else "No"),
-    sprintf("| Model scale | %d fixed effects and %d recruitment random effects |", first$n_fixed, first$n_random),
-    sprintf("| Build profile | `%s` |", build_profile)
-  )
+for (result in results) {
+  order <- match(first$canonical_parameter_names, result$canonical_parameter_names)
+  comparable <- !anyNA(order) && length(order) == length(result$canonical_parameter_names)
+  difference <- if (comparable) max(abs(first$canonical_final_parameters - result$canonical_final_parameters[order])) else NA_real_
+  build <- if (is.null(result$build_profile)) "unrecorded" else result$build_profile
+  lines <- c(lines, sprintf("| %s | %s | %s | %s | %d | %s |",
+    result$ref, result$backend,
+    format_number(abs(first$final_objective - result$final_objective)),
+    format_number(difference), result$convergence, build))
 }
 
 validation_lines <- readLines(validation_report, warn = FALSE)
@@ -99,14 +72,14 @@ if (length(memory_table)) {
 
 lines <- c(
   lines, "", "## What this means", "",
-  "Native Quadra produces the same scientific answer for this benchmark while showing substantially lower memory demand. Lower memory use can support larger models, reduce workstation and cloud requirements, and lower the risk of runs failing because of resource limits.",
+  "Assess numerical agreement and convergence for each ref alongside runtime and memory. Different backend treatments in the separate memory workload limit direct interpretation.",
   ""
 )
 
 lines <- c(
   lines,
   "## Recommended next step", "",
-  "Repeat the optimized benchmark on one additional representative assessment model, then use the combined evidence to decide whether native Quadra should advance toward broader testing.",
+  "Repeat promising comparisons on representative assessment models before drawing general performance conclusions.",
   ""
 )
 

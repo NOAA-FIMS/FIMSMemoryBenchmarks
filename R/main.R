@@ -26,11 +26,27 @@ compare_fims_branches <- function(
     instruments_attach_delay = 6,
     instruments_time_limit = "30m",
     model_size = c("large", "medium")) {
+  compare_fims_refs(
+    c(ref_first, ref_compare), macos_instruments, instruments_attach_delay,
+    instruments_time_limit, model_size
+  )
+}
+
+#' Compare a vector of FIMS refs, using the first as the baseline
+#' @param refs Character vector of branches, tags, or commits. Duplicates run once.
+#' @return Invisibly returns the new output directory path.
+compare_fims_refs <- function(
+    refs,
+    macos_instruments = TRUE,
+    instruments_attach_delay = 6,
+    instruments_time_limit = "30m",
+    model_size = c("large", "medium")) {
   model_size <- match.arg(model_size)
-  refs <- c(ref_first = ref_first, ref_compare = ref_compare)
-  if (anyNA(refs) || any(!nzchar(refs))) {
-    stop("Both refs must be non-empty branch, tag, or commit names.", call. = FALSE)
+  if (!is.character(refs) || !length(refs) || anyNA(refs) ||
+      any(!nzchar(refs)) || any(grepl("[[:space:][:cntrl:]]", refs))) {
+    stop("`refs` must be a non-empty character vector of ref names without whitespace.", call. = FALSE)
   }
+  refs <- unique(refs)
   if (length(macos_instruments) != 1L || is.na(macos_instruments)) {
     stop("`macos_instruments` must be TRUE or FALSE.", call. = FALSE)
   }
@@ -56,16 +72,14 @@ compare_fims_branches <- function(
   on.exit(setwd(old_dir), add = TRUE)
 
   env <- c(
-    paste0("REF_FIRST=", shQuote(ref_first)),
-    paste0("REF_COMPARE=", shQuote(ref_compare)),
     paste0("MACOS_INSTRUMENTS=", as.integer(isTRUE(macos_instruments))),
     paste0("FIMS_INSTRUMENTS_ATTACH_DELAY=", instruments_attach_delay),
     paste0("INSTRUMENTS_TIME_LIMIT=", shQuote(instruments_time_limit)),
     paste0("MODEL_SIZE=", shQuote(model_size))
   )
 
-  message(sprintf("Comparing FIMS '%s' (baseline) with '%s'...", ref_first, ref_compare))
-  status <- system2("bash", runner, env = env)
+  message("Comparing FIMS refs: ", paste(refs, collapse = ", "), " (first is baseline)...")
+  status <- system2("bash", c(shQuote(runner), shQuote(refs)), env = env)
   if (!identical(status, 0L)) {
     stop("Memory benchmark failed with exit status ", status, ".", call. = FALSE)
   }

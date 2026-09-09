@@ -52,9 +52,8 @@ for (result in results) {
   ))
 }
 
-if (length(results) == 2L) {
+for (second in results[-1L]) {
   first <- results[[1L]]
-  second <- results[[2L]]
   second_order <- match(
     first$canonical_parameter_names, second$canonical_parameter_names
   )
@@ -72,7 +71,7 @@ if (length(results) == 2L) {
     "Function evaluation count difference" = abs(first$function_evaluations - second$function_evaluations),
     "Gradient evaluation count difference" = abs(first$gradient_evaluations - second$gradient_evaluations)
   )
-  lines <- c(lines, "", "## Agreement", "", "| Metric | Difference |", "|---|---:|")
+  lines <- c(lines, "", paste0("## Agreement: ", second$ref, " vs ", first$ref), "", "| Metric | Difference |", "|---|---:|")
   for (name in names(metrics)) {
     lines <- c(lines, sprintf("| %s | %s |", name, format_number(metrics[[name]])))
   }

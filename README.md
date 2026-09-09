@@ -75,6 +75,26 @@ report_dir <- compare_fims_branches(
 )
 ```
 
+Compare any number of branches with a character vector:
+
+```r
+report_dir <- compare_fims_refs(
+  refs = c("update-R-with-XPtr-interface", "dev-xptr-quadra", "dev-native-quadra"),
+  model_size = "large"
+)
+```
+
+The first ref is the baseline. Each additional ref gets its own validation,
+memory, runtime, and leak results in the same output directory; comparisons are
+against that baseline. Duplicate refs run once, preserving order. A single ref
+is also supported. The original two-ref function remains available.
+
+The shell runner accepts the same ordered list as positional arguments:
+
+```bash
+bash scripts/run_massif.sh main dev-xptr-quadra dev-native-quadra
+```
+
 The script detects the host operating system. On Linux it runs Valgrind Massif.
 On macOS it records the Apple Instruments Allocations template with `xctrace`
 and uses `/usr/bin/time -l` for peak RSS and memory-footprint measurements.
@@ -167,7 +187,8 @@ API is selected only when all three functions exist in the FIMS namespace.
 The `dev-xptr-quadra` branch is recorded as backend `xptr` in validation results.
 The `helper` mode continues to delegate backend selection to FIMS's `fit_fims`.
 
-When XPtr Quadra exports `quadra_objective()` and `quadra_gradient()`, joint
+When XPtr Quadra exports `quadra_objective()` and `quadra_gradient()`, or native
+Quadra exports `native_quadra_objective()` and `native_quadra_gradient()`, joint
 validation uses those separate `nlminb` callbacks: objective-only requests use
 forward-only tape replay, and gradient requests reuse that forward pass when
 parameters match exactly. Repeated gradients reuse the last reverse pass. Older
