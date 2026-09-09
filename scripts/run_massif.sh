@@ -16,19 +16,27 @@ SUMMARY_ARGS=()
 CPU_SUMMARY_ARGS=()
 VALIDATION_ARGS=()
 LEAK_ARGS=()
+CONSOLE_ARGS=()
 HOST_OS="$(uname -s)"
 
 run_ref() {
   local ref="$1"
   local base_out_file="$2"
 
+  local ref_safe="${ref//[^A-Za-z0-9._-]/_}"
+  local build_profile="$OUTPUT_DIR/build_profile_${ref_safe}.txt"
   echo "=== Installing FIMS branch: $ref ==="
-  FIMS_REF="$ref" Rscript -e "source(file.path('R', 'setup_FIMS.R')); install_fims_profile(Sys.getenv('FIMS_REF'))"
+  if [[ "$HOST_OS" == "Darwin" ]]; then
+    FIMS_REF="$ref" /usr/bin/time -l -o "$build_profile" \
+      Rscript -e "source(file.path('R', 'setup_FIMS.R')); install_fims_profile(Sys.getenv('FIMS_REF'))"
+  else
+    FIMS_REF="$ref" /usr/bin/time -v -o "$build_profile" \
+      Rscript -e "source(file.path('R', 'setup_FIMS.R')); install_fims_profile(Sys.getenv('FIMS_REF'))"
+  fi
 
   local fims_version
   fims_version=$(Rscript -e "cat(as.character(packageVersion('FIMS')))")
 
-  local ref_safe="${ref//[^A-Za-z0-9._-]/_}"
   local validation_out="$OUTPUT_DIR/joint_validation_${ref_safe}_${fims_version}.rds"
   echo "=== Running joint output validation -> $validation_out ==="
   REPO_ROOT="$REPO_ROOT" VALIDATION_OUT="$validation_out" \
@@ -38,6 +46,7 @@ run_ref() {
   local leak_out="$OUTPUT_DIR/leaks_${ref_safe}_${fims_version}.json"
   python3 "$REPO_ROOT/scripts/check_leaks.py" --ref "$ref" --output "$leak_out"
   LEAK_ARGS+=("$leak_out")
+  CONSOLE_ARGS+=(--run "$ref" "$OUTPUT_DIR/macos_profile_${ref_safe}_${fims_version}.txt" "${validation_out}.runtime_seconds" "$build_profile" "$leak_out")
   if [[ "$HOST_OS" == "Darwin" ]]; then
     local native_out="$OUTPUT_DIR/macos_profile_${ref_safe}_${fims_version}.txt"
     local trace_out="$OUTPUT_DIR/instruments_allocations_${ref_safe}_${fims_version}.trace"
@@ -220,3 +229,5 @@ echo "CPU summary: $CPU_REPORT_FILE"
 echo "Joint validation summary: $VALIDATION_REPORT_FILE"
 echo "Combined final report: $FINAL_REPORT_FILE"
 echo "Management summary: $MANAGEMENT_REPORT_FILE"
+python3 "$REPO_ROOT/scripts/console_summary.py" \
+  --platform "$HOST_OS" "${CONSOLE_ARGS[@]}"

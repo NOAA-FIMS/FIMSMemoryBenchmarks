@@ -65,6 +65,21 @@ expand_fims_years <- function(data, n_years) {
 }
 
 
+# Resolve complete modern APIs from FIMS itself, preferring the XPtr API.
+resolve_quadra_api <- function(namespace) {
+  for (backend in c("xptr", "native")) {
+    prefix <- if (backend == "xptr") "quadra_" else "native_quadra_"
+    functions <- lapply(paste0(prefix, c("evaluate", "fit", "sdreport")), function(name) {
+      get0(name, envir = namespace, mode = "function", inherits = FALSE)
+    })
+    if (all(vapply(functions, is.function, logical(1)))) {
+      names(functions) <- c("evaluate", "fit", "sdreport")
+      return(c(list(backend = backend), functions))
+    }
+  }
+  NULL
+}
+
 setup_fims_model <- function(mode = c(
                                "helper", "sd_report_clear", "sd_report",
                                "opt_only", "inner", "tape_only",
@@ -225,29 +240,8 @@ setup_fims_model <- function(mode = c(
   }
 
   fims_namespace <- asNamespace("FIMS")
-  native_quadra_evaluate <- get0(
-    "native_quadra_evaluate",
-    envir = fims_namespace,
-    mode = "function",
-    inherits = FALSE
-  )
-  native_quadra_fit <- get0(
-    "native_quadra_fit",
-    envir = fims_namespace,
-    mode = "function",
-    inherits = FALSE
-  )
-  native_quadra_sdreport <- get0(
-    "native_quadra_sdreport",
-    envir = fims_namespace,
-    mode = "function",
-    inherits = FALSE
-  )
-  has_native_quadra <- all(vapply(
-    list(native_quadra_evaluate, native_quadra_fit, native_quadra_sdreport),
-    is.function,
-    logical(1)
-  ))
+  quadra_api <- resolve_quadra_api(fims_namespace)
+  has_modern_quadra <- !is.null(quadra_api)
 
   legacy_quadra_functions <- c(
     "CreateQuadraModel", "EvaluateQuadraModel", "fit_fims_quadra_joint",
@@ -260,7 +254,7 @@ setup_fims_model <- function(mode = c(
     mode = "function",
     inherits = TRUE
   ))
-  has_legacy_quadra <- !has_native_quadra && has_legacy_quadra_api && tryCatch(
+  has_legacy_quadra <- !has_modern_quadra && has_legacy_quadra_api && tryCatch(
     {
       CreateQuadraModel()
       TRUE
@@ -276,8 +270,8 @@ setup_fims_model <- function(mode = c(
       stop(error)
     }
   )
-  quadra_backend <- if (has_native_quadra) {
-    "native"
+  quadra_backend <- if (has_modern_quadra) {
+    quadra_api$backend
   } else if (has_legacy_quadra) {
     "legacy"
   } else {
@@ -321,9 +315,9 @@ setup_fims_model <- function(mode = c(
         "Recruitment.1.log_devs.", seq.int(2L, model_years)
       )
     }
-    if (quadra_backend == "native") {
+    if (quadra_backend %in% c("xptr", "native")) {
       evaluate <- function(parameters) {
-        native_quadra_evaluate(
+        quadra_api$evaluate(
           fixed = parameters[seq_along(fixed)],
           random = parameters[length(fixed) + seq_along(random)]
         )
@@ -350,8 +344,24 @@ setup_fims_model <- function(mode = c(
       }
     }
     initial <- evaluate(start)
-    objective <- function(parameters) evaluate(parameters)$objective
-    gradient <- function(parameters) evaluate(parameters)$gradient
+    split_objective <- get0("quadra_objective", fims_namespace, mode = "function", inherits = FALSE)
+    split_gradient <- get0("quadra_gradient", fims_namespace, mode = "function", inherits = FALSE)
+    if (quadra_backend == "xptr" && is.function(split_objective) && is.function(split_gradient)) {
+      objective <- function(parameters) split_objective(
+        fixed = parameters[seq_along(fixed)],
+        random = parameters[length(fixed) + seq_along(random)]
+      )
+      gradient <- function(parameters) split_gradient(
+        fixed = parameters[seq_along(fixed)],
+        random = parameters[length(fixed) + seq_along(random)]
+      )
+    } else if (quadra_backend == "none") {
+      objective <- joint$fn
+      gradient <- joint$gr
+    } else {
+      objective <- function(parameters) evaluate(parameters)$objective
+      gradient <- function(parameters) evaluate(parameters)$gradient
+    }
     started <- proc.time()[["elapsed"]]
     fit <- nlminb(
       start = start,
@@ -420,8 +430,8 @@ setup_fims_model <- function(mode = c(
     ))
   }
 
-  if (quadra_backend == "native") {
-    message("--> Step 2: Use native Quadra model...")
+  if (quadra_backend %in% c("xptr", "native")) {
+    message(sprintf("--> Step 2: Use %s Quadra model...", quadra_backend))
   } else if (quadra_backend == "legacy") {
     message("--> Step 2: Created legacy Quadra model...")
   } else {
@@ -444,10 +454,10 @@ setup_fims_model <- function(mode = c(
 
   if (target_level == 3) {
     message("--> Step 3: Evaluate objective and gradient...")
-    evaluate_inner <- if (quadra_backend == "native") {
+    evaluate_inner <- if (quadra_backend %in% c("xptr", "native")) {
       fixed <- get_fixed()
       random <- get_random()
-      function() native_quadra_evaluate(fixed = fixed, random = random)
+      function() quadra_api$evaluate(fixed = fixed, random = random)
     } else if (quadra_backend == "legacy") {
       fixed <- get_fixed()
       random <- get_random()
@@ -478,8 +488,8 @@ setup_fims_model <- function(mode = c(
   }
 
   message("--> Step 4: Fit the model...")
-  if (quadra_backend == "native") {
-    fit <- native_quadra_fit(
+  if (quadra_backend %in% c("xptr", "native")) {
+    fit <- quadra_api$fit(
       fixed = get_fixed(),
       random = get_random(),
       method = "joint",
@@ -507,9 +517,9 @@ setup_fims_model <- function(mode = c(
   if (target_level == 4) {
     return(print("model ran without error"))
   }
-  if (quadra_backend == "native") {
-    message("--> Step 5: Create native Quadra uncertainty report...")
-    sdreport <- native_quadra_sdreport(
+  if (quadra_backend %in% c("xptr", "native")) {
+    message(sprintf("--> Step 5: Create %s Quadra uncertainty report...", quadra_backend))
+    sdreport <- quadra_api$sdreport(
       fixed = fit$par,
       random = fit$random
     )

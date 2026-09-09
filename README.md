@@ -141,6 +141,40 @@ validation, final, and management reports show total runtime alongside the
 optimization-only timing. Older runs show `Not recorded` for total runtime;
 their separate memory-workload timings cannot supply this measurement.
 
+The runner finishes with a console comparison of peak RSS and total validation
+runtime for each branch, including absolute and percentage changes relative to
+the first branch. RSS comes from the separate macOS `inner` workload; runtime
+comes from the complete joint-validation process. Missing measurements show
+`Not recorded`. Linux currently collects Massif heap usage rather than peak RSS,
+so its console model-run RSS comparison is unavailable.
+
+The console also includes build peak process RSS and leaked/lost bytes for each
+branch. Installation is wrapped in `/usr/bin/time` (`-l` on macOS, GNU `-v` on
+Linux), with the raw measurement saved as `build_profile_<ref>.txt`. This is the
+OS-reported maximum per-process RSS, not the sum of simultaneous compiler
+processes. It covers the installation command, including build and package load
+checks. Linux requires GNU time at `/usr/bin/time`.
+
+Leak totals come from each branch's leak-check JSON. On macOS this is reported
+leaked bytes; on Linux it sums definitely, indirectly, and possibly lost bytes,
+excluding reachable and suppressed allocations. The console includes check
+status so unavailable or failed measurements cannot be mistaken for zero leaks.
+
+Backend selection for validation, evaluation, fitting, and uncertainty reporting
+prefers the XPtr Quadra API (`quadra_evaluate`, `quadra_fit`, `quadra_sdreport`),
+then the `native_quadra_*` API, then legacy Quadra, and finally TMB. A modern
+API is selected only when all three functions exist in the FIMS namespace.
+The `dev-xptr-quadra` branch is recorded as backend `xptr` in validation results.
+The `helper` mode continues to delegate backend selection to FIMS's `fit_fims`.
+
+When XPtr Quadra exports `quadra_objective()` and `quadra_gradient()`, joint
+validation uses those separate `nlminb` callbacks: objective-only requests use
+forward-only tape replay, and gradient requests reuse that forward pass when
+parameters match exactly. Repeated gradients reuse the last reverse pass. Older
+Quadra builds retain the combined-evaluation fallback. TMB validation also uses
+its separate `fn` and `gr` callbacks. Initial/final validation diagnostics still
+use the combined evaluator, and Quadra's combined API remains available.
+
 Leak detection runs separately for each branch by default (`LEAK_CHECK=0` disables
 it). macOS uses `leaks --atExit` with allocation stack logging; Linux uses Valgrind
 Memcheck with full leak checking. Each runs the joint-validation workload,
