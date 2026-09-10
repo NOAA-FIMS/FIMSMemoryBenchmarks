@@ -1,20 +1,22 @@
 # Compiler flags for memory profiling. Pointed at by R_MAKEVARS_USER, which R
 # reads in place of ~/.R/Makevars.
 #
-# These are assignments, not "+=" on PKG_CXXFLAGS: R builds its compile line as
-#   ALL_CXXFLAGS = $(PKG_CXXFLAGS) ... $(CXXFLAGS)
-# so anything added to PKG_CXXFLAGS is followed by R's own -O2 and loses, since
-# the last -O on the command line wins. Setting CXXFLAGS replaces it.
+# Two things make this file look redundant, and both matter:
 #
-# -O0                       allocation sites map back to source exactly
-# -g                        symbols and line numbers for ms_print
-# -fno-omit-frame-pointer   reliable stack unwinding
-# -fvisibility=default      keep symbols visible; R defaults to hidden
+# 1. Assignments, not "+=" on PKG_CXXFLAGS. R builds the compile line as
+#      ALL_CXXFLAGS = $(PKG_CXXFLAGS) ... $(CXXFLAGS)
+#    so anything added to PKG_CXXFLAGS is followed by R's own -O2 and loses.
 #
-# -O0 is slow on template-heavy Eigen and TMB code, and Valgrind multiplies
-# that. If a run is impractical, -Og keeps most of the speed and nearly all of
-# the debuggability.
-CXXFLAGS = -g -Og -fno-omit-frame-pointer -fvisibility=default
-CFLAGS   = -g -Og -fno-omit-frame-pointer -fvisibility=default
+# 2. Every CXXnnFLAGS variant. A package that declares a C++ standard is built
+#    with that standard's variables: FIMS says C++17, so R uses CXX17FLAGS and
+#    ignores CXXFLAGS entirely. Setting only CXXFLAGS silently does nothing.
+#
+# allocation sites map back to source exactly.
+CFLAGS      = -O0 -g -fno-omit-frame-pointer -fvisibility=default
+CXXFLAGS    = -O0 -g -fno-omit-frame-pointer -fvisibility=default
+CXX11FLAGS  = -O0 -g -fno-omit-frame-pointer -fvisibility=default
+CXX14FLAGS  = -O0 -g -fno-omit-frame-pointer -fvisibility=default
+CXX17FLAGS  = -O0 -g -fno-omit-frame-pointer -fvisibility=default
+CXX20FLAGS  = -O0 -g -fno-omit-frame-pointer -fvisibility=default
 CXX_VISIBILITY =
 C_VISIBILITY   =
