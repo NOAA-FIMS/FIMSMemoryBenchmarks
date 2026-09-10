@@ -7,14 +7,12 @@ make_fims_fixture <- function() {
   utils::data("data_big", package = "FIMS", envir = environment())
   data_4_model <- FIMS::FIMSFrame(data_big)
 
-  parameters_4_model <- FIMS::create_default_configurations(data = data_4_model) |>
-    FIMS::create_default_parameters(data = data_4_model) |>
-    tidyr::unnest(cols = data) |>
+  parameters_4_model <- FIMS::setup_default_parameters(data = data_4_model) |>
     dplyr::rows_update(
       tibble::tibble(
         fleet = "fleet1",
         label = "log_Fmort",
-        time = seq(FIMS::get_n_years(data_4_model)),
+        timing = seq(FIMS::get_n_years(data_4_model)),
         value = log(c(
           0.009459165, 0.027288858, 0.045063639, 0.061017825, 0.048600752,
           0.087420554, 0.088447204, 0.186607929, 0.109008958, 0.132704335,
@@ -24,7 +22,7 @@ make_fims_fixture <- function() {
           0.314171227, 0.308026829, 0.431745298, 0.328030899, 0.499675368
         ))
       ),
-      by = c("fleet", "label", "time")
+      by = c("fleet", "label", "timing")
     ) |>
     dplyr::rows_update(
       tibble::tibble(
@@ -37,7 +35,7 @@ make_fims_fixture <- function() {
     dplyr::rows_update(
       tibble::tibble(
         label = "log_devs",
-        time = 2:FIMS::get_n_years(data_4_model),
+        timing = 2:FIMS::get_n_years(data_4_model),
         value = c(
           0.43787763, -0.13299042, -0.43251973, 0.64861200, 0.50640852,
           -0.06958319, 0.30246260, -0.08257384, 0.20740372, 0.15289604,
@@ -47,7 +45,7 @@ make_fims_fixture <- function() {
           -0.19556523, 0.20094360, 0.37248740, -0.07163145
         )
       ),
-      by = c("label", "time")
+      by = c("label", "timing")
     ) |>
     dplyr::rows_update(
       tibble::tibble(

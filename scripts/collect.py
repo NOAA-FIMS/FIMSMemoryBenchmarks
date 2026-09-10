@@ -163,13 +163,23 @@ def parse_allocation_stats(trace_path: Path) -> list[tuple[str, str, float]]:
 
 
 def parse_perf_symbols(path: Path) -> list[tuple[str, str, float]]:
-    """Top symbols and their overhead percentages from `perf report --stdio`."""
-    pattern = re.compile(r"^\s*([0-9.]+)%\s+\S+\s+\S+\s+(?:\[[^.]+\.\]\s+)?(.+?)\s*$")
+    """Self-time percentages from `perf report --stdio --no-children`.
+
+    Lines look like "  10.38%  libR.so  [.] Rf_findVarInFrame3": one percentage,
+    the shared object, a symbol-type marker, then the symbol. Both the object
+    and the symbol are kept, because knowing whether time is in FIMS.so or in
+    R's evaluator is most of the answer.
+    """
+    # The trailing "-      -" columns are perf's empty srcline fields.
+    pattern = re.compile(r"^\s*([0-9.]+)%\s+(\S+)\s+\[[^\]]*\]\s+(.+?)(?:\s+-\s+-)?\s*$")
     found: list[tuple[str, str, float]] = []
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if line.startswith("#"):
+            continue
         match = pattern.match(line)
         if match:
-            found.append((f"symbol:{match.group(2)}", "percent", float(match.group(1))))
+            percent, dso, symbol = match.group(1), match.group(2), match.group(3)
+            found.append((f"symbol:{dso}::{symbol}", "percent", float(percent)))
         if len(found) >= TOP_SYMBOLS:
             break
     return found

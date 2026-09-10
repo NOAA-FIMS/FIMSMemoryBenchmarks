@@ -10,17 +10,31 @@
 # IMPORTANT: run this in an R session that has never loaded FIMS. Installing a
 # different build over a mapped DLL is unreliable.
 
-# Memory profiling wants unoptimized, unstripped frames; CPU profiling wants
-# optimized code that still has symbols. R reads R_MAKEVARS_USER in place of
-# ~/.R/Makevars, so the shared file is never touched.
-BUILD_FLAGS <- list(
-  debug = c("PKG_CXXFLAGS += -g -O0 -fno-omit-frame-pointer -fvisibility=default",
-            "PKG_STRIP = true"),
-  profile = c("PKG_CXXFLAGS += -g -O2 -fno-omit-frame-pointer -fvisibility=default",
-              "PKG_STRIP = true")
-)
-
 path_safe <- function(value) gsub("[^A-Za-z0-9._-]", "_", value)
+
+# The commit a ref points at, so a cached build can be checked against it. A
+# bare SHA is already immutable; a branch or tag has to be asked of the remote.
+# NA means "could not tell", which forces a reinstall rather than risking a
+# stale build.
+resolve_ref_sha <- function(ref, repo = "https://github.com/NOAA-FIMS/FIMS") {
+  if (grepl("^[0-9a-f]{7,40}$", ref)) return(ref)
+  out <- suppressWarnings(
+    system2("git", c("ls-remote", shQuote(repo), shQuote(ref)), stdout = TRUE, stderr = FALSE))
+  if (!length(out) || !nzchar(out[[1]])) return(NA_character_)
+  sub("\\s.*$", "", out[[1]])
+}
+
+# system2(stdout = file) truncates, so each subprocess would erase the previous
+# one's output. Capture and append instead: the log is the only record of why a
+# profiler or an install failed.
+run_logged <- function(command, args, env = character(), log) {
+  output <- suppressWarnings(system2(command, args, env = env,
+                                     stdout = TRUE, stderr = TRUE))
+  status <- attr(output, "status")
+  cat(paste0("\n$ ", command, " ", paste(args, collapse = " "), "\n"),
+      paste(output, collapse = "\n"), "\n", file = log, append = TRUE)
+  list(status = if (is.null(status)) 0L else as.integer(status), output = output)
+}
 
 
 #' Compare two FIMS refs on one stage of the interface ladder
@@ -40,6 +54,11 @@ path_safe <- function(value) gsub("[^A-Za-z0-9._-]", "_", value)
 #' @param mem_baseline Also profile a fixture-only run, so the report can
 #'   subtract everything that is not the stage.
 #' @param n_eval fn/gr evaluations at stage "evaluate".
+#' @param overwrite Replace an earlier run of the same comparison from the same
+#'   day. FALSE keeps it and adds a numbered suffix.
+#' @param reinstall Rebuild FIMS even when the cached build is already at the
+#'   commit the ref points at. Builds are cached in `outputs/.lib-cache` and
+#'   reused, since compiling FIMS from source is the slowest part of a run.
 #' @param macos_instruments Capture Instruments traces on macOS.
 #' @param instruments_attach_delay Seconds the workload waits, after loading the
 #'   fixture, for a profiler to attach. Raise it on a slow host.
@@ -54,6 +73,8 @@ run_fims_benchmark <- function(ref_first = "main",
                                teardown = c("none", "clear", "release"),
                                mem_baseline = TRUE,
                                n_eval = 1L,
+                               overwrite = TRUE,
+                               reinstall = FALSE,
                                macos_instruments = TRUE,
                                instruments_attach_delay = 6,
                                instruments_time_limit = "30m") {
@@ -82,10 +103,17 @@ run_fims_benchmark <- function(ref_first = "main",
   host <- Sys.info()[["sysname"]]
 
   # ---- run directory ------------------------------------------------------
-  run_date <- format(Sys.time(), "%Y%m%d", tz = "UTC")
+  # Local date, not UTC: a run started on the evening of the 9th should be
+  # filed under the 9th, not tomorrow. manifest.tsv keeps the full timestamp
+  # with its offset if a run ever has to be placed exactly.
+  run_date <- format(Sys.time(), "%Y%m%d")
   output_dir <- file.path(repo_root, "outputs",
                           paste0(run_date, "_", path_safe(ref_first),
                                  "_vs_", path_safe(ref_compare)))
+  if (dir.exists(output_dir) && isTRUE(overwrite)) {
+    message("Replacing the earlier run in ", basename(output_dir))
+    unlink(output_dir, recursive = TRUE)
+  }
   suffix <- 1L
   while (dir.exists(output_dir)) {
     suffix <- suffix + 1L
@@ -105,37 +133,90 @@ run_fims_benchmark <- function(ref_first = "main",
   builds <- list()
 
   for (build_type in build_types) {
-    makevars <- file.path(output_dir, paste0("Makevars.", build_type))
-    writeLines(BUILD_FLAGS[[build_type]], makevars)
+    # Checked in under scripts/, not generated: the flags do not depend on what
+    # is being compared. A copy goes into the run directory so a set of results
+    # still records the flags that produced it.
+    makevars <- file.path(repo_root, "scripts", paste0("Makevars.", build_type))
+    if (!file.exists(makevars)) {
+      stop("Missing ", makevars, call. = FALSE)
+    }
+    file.copy(makevars, file.path(output_dir, basename(makevars)), overwrite = TRUE)
 
     for (ref in refs) {
-      lib <- file.path(output_dir, "lib", build_type, path_safe(ref))
+      # Libraries live outside the run directory and are reused: a source build
+      # of FIMS is the slowest part of a run, and rebuilding an unchanged commit
+      # gains nothing.
+      lib <- file.path(repo_root, "outputs", ".lib-cache", build_type, path_safe(ref))
       dir.create(lib, recursive = TRUE, showWarnings = FALSE)
-      env <- c(paste0("R_LIBS_USER=", shQuote(lib)),
+      sha_file <- file.path(lib, ".installed-sha")
+      wanted_sha <- resolve_ref_sha(ref)
+      cached_sha <- if (file.exists(sha_file)) readLines(sha_file, warn = FALSE)[[1]] else NA_character_
+      have_build <- dir.exists(file.path(lib, "FIMS"))
+      # R_LIBS prepends; R_LIBS_USER would *replace* the user library and hide
+      # every package already installed there, so remotes would rebuild the
+      # whole dependency tree for each ref.
+      env <- c(paste0("R_LIBS=", shQuote(lib)),
                paste0("R_MAKEVARS_USER=", shQuote(makevars)),
                "R_REMOTES_UPGRADE=never",
                paste0("REPO_ROOT=", shQuote(repo_root)),
                paste0("FIMS_REF=", shQuote(ref)))
 
+      reuse <- have_build && !isTRUE(reinstall) &&
+        !is.na(cached_sha) && !is.na(wanted_sha) && identical(cached_sha, wanted_sha)
+
+      if (reuse) {
+        message("  reusing ", ref, " (", build_type, ") at ", substr(cached_sha, 1, 7))
+      } else {
       message("  installing ", ref, " (", build_type, ")")
-      code <- system2("Rscript",
-                      c("-e", shQuote(paste0("source(file.path(Sys.getenv('REPO_ROOT'), 'R', 'setup_FIMS.R')); ",
-                                             "install_fims_debug(Sys.getenv('FIMS_REF'))"))),
-                      env = env, stdout = log_file, stderr = log_file)
+      code <- run_logged("Rscript",
+                         c("-e", shQuote(paste0("source(file.path(Sys.getenv('REPO_ROOT'), 'R', 'setup_FIMS.R')); ",
+                                                "install_fims_debug(Sys.getenv('FIMS_REF'))"))),
+                         env = env, log = log_file)$status
       if (code != 0L) {
         stop("Installing '", ref, "' (", build_type, ") failed; see ", log_file, call. = FALSE)
       }
+      if (!is.na(wanted_sha)) writeLines(wanted_sha, sha_file) else unlink(sha_file)
+      }
 
-      version <- tail(system2("Rscript",
-                              c("-e", shQuote("cat(as.character(packageVersion('FIMS')))")),
-                              env = env, stdout = TRUE), 1L)
+      # Report where FIMS was found as well as its version: with the user
+      # library still visible, a failed install would otherwise fall back to a
+      # previously installed FIMS without saying so.
+      found <- tail(system2("Rscript",
+                            c("-e", shQuote(paste0("cat(as.character(packageVersion('FIMS')), ",
+                                                   "dirname(system.file(package = 'FIMS')), sep = '|')"))),
+                            env = env, stdout = TRUE), 1L)
+      parts <- strsplit(found, "|", fixed = TRUE)[[1]]
+      version <- parts[[1]]
+      if (length(parts) < 2 || !identical(normalizePath(parts[[2]], mustWork = FALSE),
+                                          normalizePath(lib, mustWork = FALSE))) {
+        stop("FIMS for '", ref, "' (", build_type, ") was loaded from ",
+             if (length(parts) > 1) parts[[2]] else "an unknown library",
+             " rather than ", lib, "; the install did not land where it should.",
+             call. = FALSE)
+      }
 
-      builds[[build_type]][[ref]] <- list(lib = lib, version = version)
+      builds[[build_type]][[ref]] <- list(lib = lib, version = version,
+                                          sha = wanted_sha)
     }
   }
 
   versions <- vapply(refs, function(ref) builds[[build_types[[1]]]][[ref]]$version,
                      character(1))
+
+  # Two branches often share a DESCRIPTION version, so record the commit each
+  # ref resolved to. This is the file to check when a result looks wrong.
+  utils::write.table(
+    data.frame(
+      ref = refs,
+      version = versions,
+      commit = vapply(refs, function(ref) {
+        sha <- builds[[build_types[[1]]]][[ref]]$sha
+        if (is.null(sha) || is.na(sha)) "unknown" else sha
+      }, character(1)),
+      library = vapply(refs, function(ref) builds[[build_types[[1]]]][[ref]]$lib,
+                       character(1)),
+      stringsAsFactors = FALSE),
+    file.path(output_dir, "refs.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
 
   # ---- profile ------------------------------------------------------------
   # scripts/collect.py turns this list of artifacts into results.tsv.
@@ -151,11 +232,15 @@ run_fims_benchmark <- function(ref_first = "main",
   profile_run <- function(script, args, capture = FALSE) {
     args <- c(shQuote(file.path(repo_root, "scripts", script)), args,
               "--repo-root", shQuote(repo_root))
+    result <- run_logged("bash", args, log = log_file)
     if (capture) {
-      out <- suppressWarnings(system2("bash", args, stdout = TRUE, stderr = log_file))
-      if (length(out)) tail(out, 1L) else "failed"
+      # The wrapper prints one status word, but its diagnostics land in the same
+      # captured stream, so match the word rather than trusting the last line.
+      states <- grep("^(captured|captured-export-failed|failed|unavailable|disabled)$",
+                     result$output, value = TRUE)
+      if (length(states)) tail(states, 1L) else "failed"
     } else {
-      system2("bash", args, stdout = log_file, stderr = log_file)
+      result$status
     }
   }
 
@@ -176,7 +261,13 @@ run_fims_benchmark <- function(ref_first = "main",
                             c("--tool", tool, "--lib", shQuote(build$lib),
                               "--stage", stage, "--mode", "fixture",
                               "--teardown", teardown, "--out", shQuote(out)))
-        if (code != 0L) memory_status <- code
+        # Fail on the first failure rather than repeating it for every ref and
+        # profiler: when the model itself is broken, every later measurement
+        # fails the same way and each one is slow.
+        if (code != 0L) {
+          stop("Memory baseline for '", ref, "' exited with status ", code,
+               ". See ", log_file, call. = FALSE)
+        }
         add_input(kind, ref, "fixture", 1L, "", out)
       }
 
@@ -207,7 +298,10 @@ run_fims_benchmark <- function(ref_first = "main",
                             "--stage", stage, "--mode", "stage",
                             "--teardown", teardown, "--out", shQuote(out),
                             "--signature", shQuote(signature)))
-      if (code != 0L) memory_status <- code
+      if (code != 0L) {
+        stop("Memory profile for '", ref, "' exited with status ", code,
+             ". See ", log_file, call. = FALSE)
+      }
       add_input(kind, ref, stage, 1L, "", out)
     }
     status[["memory"]] <- memory_status
@@ -215,6 +309,7 @@ run_fims_benchmark <- function(ref_first = "main",
 
   if ("cpu" %in% profiles) {
     tool <- if (identical(host, "Darwin")) "instruments" else "perf"
+    cpu_states <- character()
     for (ref in refs) {
       build <- builds[["profile"]][[ref]]
       out <- file.path(output_dir, paste0("cpu_", path_safe(ref),
@@ -229,13 +324,17 @@ run_fims_benchmark <- function(ref_first = "main",
                              "--attach-delay", instruments_attach_delay,
                              "--time-limit", instruments_time_limit),
                            capture = TRUE)
+      cpu_states[[ref]] <- state
+      if (identical(state, "failed")) {
+        stop("CPU profile for '", ref, "' failed. See ", log_file, call. = FALSE)
+      }
       add_input("cpu-status", ref, stage, 1L, state, report)
       if (grepl("^captured", state)) {
         add_input(if (tool == "perf") "perf" else "instruments-cpu",
                   ref, stage, 1L, "", report)
       }
     }
-    status[["cpu"]] <- 0L
+    status[["cpu"]] <- if (any(cpu_states == "failed")) 1L else 0L
   }
 
   # ---- collect and report -------------------------------------------------
@@ -245,25 +344,25 @@ run_fims_benchmark <- function(ref_first = "main",
 
   utils::write.table(do.call(rbind, inputs), inputs_file, sep = "\t",
                      row.names = FALSE, quote = FALSE)
-  collected <- system2("python3",
-                       c(shQuote(file.path(repo_root, "scripts", "collect.py")),
-                         "--inputs", shQuote(inputs_file),
-                         "--teardown", teardown,
-                         "--output", shQuote(results_file)),
-                       stdout = log_file, stderr = log_file)
+  collected <- run_logged("python3",
+                          c(shQuote(file.path(repo_root, "scripts", "collect.py")),
+                            "--inputs", shQuote(inputs_file),
+                            "--teardown", teardown,
+                            "--output", shQuote(results_file)),
+                          log = log_file)$status
 
   if (collected == 0L && file.exists(results_file)) {
     signature_args <- unlist(lapply(names(signatures), function(ref) {
       if (file.exists(signatures[[ref]])) c("--signature", shQuote(ref), shQuote(signatures[[ref]]))
     }))
-    system2("python3",
+    run_logged("python3",
             c(shQuote(file.path(repo_root, "scripts", "report.py")),
               "--results", shQuote(results_file),
               "--stage", stage, "--teardown", teardown,
               "--platform", host, "--run-id", shQuote(run_id),
               signature_args,
               "--output", shQuote(report_file)),
-            stdout = log_file, stderr = log_file)
+            log = log_file)
   } else {
     warning("Collecting measurements failed; see ", log_file, call. = FALSE)
     report_file <- NA_character_
@@ -277,10 +376,16 @@ run_fims_benchmark <- function(ref_first = "main",
   renamed <- file.path(repo_root, "outputs",
                        paste0(run_date, "_", path_safe(ref_first), "-",
                               path_safe(versions[[ref_first]]), "_vs_", compare_label))
+  # The final name carries the version, so an earlier run of the same
+  # comparison is replaced here too, not just at the pre-rename path.
+  if (dir.exists(renamed) && isTRUE(overwrite) && !identical(renamed, output_dir)) {
+    unlink(renamed, recursive = TRUE)
+  }
   if (!dir.exists(renamed) && file.rename(output_dir, renamed)) {
     output_dir <- renamed
     run_id <- basename(renamed)
     if (!is.na(report_file)) report_file <- file.path(output_dir, basename(report_file))
+    log_file <- file.path(output_dir, basename(log_file))
   }
 
   manifest <- data.frame(
@@ -295,6 +400,15 @@ run_fims_benchmark <- function(ref_first = "main",
   message("Done: ", output_dir)
   if (!is.na(report_file)) message("Report: ", report_file)
   print(manifest[, c("profile", "status")])
+
+  # A profiler that could not run at all (a missing tool, say) does not abort
+  # the run, but it must not be reported as a success either.
+  failed <- names(status)[status != 0L]
+  if (length(failed)) {
+    stop("These profiles did not complete: ", paste(failed, collapse = ", "),
+         ". See ", log_file, call. = FALSE)
+  }
+
   invisible(output_dir)
 }
 

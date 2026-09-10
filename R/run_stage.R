@@ -20,6 +20,17 @@
 
 source(file.path(Sys.getenv("REPO_ROOT", getwd()), "R", "setup_FIMS.R"))
 
+# FIMS is attached, not just loaded: its DESCRIPTION sets LazyData, so data
+# objects such as fims_input_types reach package code through the search path.
+# Calling FIMS::FIMSFrame() without this fails with "object 'fims_input_types'
+# not found" from inside the package.
+#
+# Which FIMS this loads is decided by R_LIBS, which the profiler wrapper points
+# at this ref's library. Keep no FIMS installed in the user or site library: a
+# copy there is a silent fallback, so a half-finished install would measure that
+# build instead of the one under test, with nothing in the output to say so.
+library(FIMS)
+
 stage <- Sys.getenv("FIMS_STAGE", "initialize")
 stage_mode <- Sys.getenv("STAGE_MODE", "stage")
 teardown <- Sys.getenv("TEARDOWN", "none")

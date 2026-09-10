@@ -1,112 +1,133 @@
 # FIMSMemoryBenchmarks
 
-A repository to benchmark and compare the memory footprint of NOAA-FIMS/FIMS builds.
+Compare the memory and CPU cost of two [NOAA-FIMS/FIMS](https://github.com/NOAA-FIMS/FIMS)
+builds. Each branch is installed from source, one rung of the FIMS interface
+ladder is profiled under Valgrind and `perf` (or Instruments on macOS), and the
+results are collected into one table and one report.
 
-## Repository Layout
+## Requirements
 
-- `/R`: Helper R scripts for setup and benchmark stage execution.
-- `/scripts`: Shell runners for memory profiling tools.
-- `/outputs`: Benchmark and profiler outputs (`.gitkeep` included).
-- `/.devcontainer`: Codespaces setup for debug-safe R compilation flags.
+- R with `remotes`, `bench`, `dplyr`, `tidyr`, and FIMS's own dependencies
+- `python3` for the collector and reporter
+- Linux: `valgrind`, and `perf` for CPU profiles
+- macOS: Xcode, for `xctrace`
 
-## Debug Build Configuration in Codespaces
+Keep **no FIMS installed in your user or site library**. Each run installs the
+builds it needs into its own directories; a copy elsewhere is a silent fallback
+that a half-finished install could quietly measure instead.
 
-This repository includes `.devcontainer/postCreate.sh`, which configures `~/.R/Makevars` with:
+## Running a comparison
 
-- `PKG_CXXFLAGS += -g -O0 -fno-omit-frame-pointer -fvisibility=default`
-- `PKG_STRIP = true`
-
-These settings preserve symbols and frame pointers for profiler-friendly builds.
-
-## Install FIMS in Debug Mode
-
-`R/setup_FIMS` provides:
-
-```r
-install_fims_debug(ref = "main")
-```
-
-It installs `NOAA-FIMS/FIMS` from GitHub for a chosen branch/tag/commit using source compilation.
-
-## Benchmark Stages
-
-`R/run_benchmark.R` is structured into five stages:
-
-1. Static model construction through `MakeADFun()`
-2. Single evaluation calls (`obj$fn()` and `obj$gr()`)
-3. Full optimization run with `nlminb` (without `sdreport`)
-4. Full optimization run with `nlminb` and `sdreport`
-5. Cleanup and retention check via `TMB::FreeADFun(obj)` and `gc()`
-
-> Before sourcing `R/run_benchmark.R`, define `fims_stage1_builder()` so it returns the stage-1 `MakeADFun()` object.
-
-## Run Memory Benchmarks
+Edit the settings at the top of `R/main.R` — the refs, the stage, the teardown
+mode, which profilers to run — then:
 
 ```bash
-bash scripts/run_massif.sh
+Rscript R/main.R
 ```
 
-By default this compares `main` with `xptr-refactor`. Override either ref without
-editing the script:
-
-```bash
-REF_FIRST=main REF_COMPARE=my-feature-branch bash scripts/run_massif.sh
-```
-
-You can also run the comparison from R. The function invisibly returns the new
-output directory:
+Or call it directly from a session that has never loaded FIMS:
 
 ```r
-source("R/main.R")
-report_dir <- compare_fims_branches(
-  ref_first = "main",
-  ref_compare = "remove-direct-rcpp"
-)
+source("R/run_benchmark.R")
+run_fims_benchmark("main", "xptr-refactor", stage = "initialize")
 ```
 
-The script detects the host operating system. On Linux it runs Valgrind Massif.
-On macOS it records the Apple Instruments Allocations template with `xctrace`
-and uses `/usr/bin/time -l` for peak RSS and memory-footprint measurements.
+`stage` is a rung of the ladder in `run_fims_stages()`: `initialize`,
+`assemble`, `tape`, `evaluate`, `optimize`, `sdreport`, or `helper` for the
+end-to-end `fit_fims()` path. The ladder is cumulative, so `sdreport` runs
+everything below it.
 
-Each run generates:
+## What a run produces
 
-- A timestamped `outputs/<run-id>/` directory, so repeated runs do not mix data
-- On Linux, Massif output files, Valgrind logs, and `valgrind_massif_report.md`
-- On macOS, Instruments `.trace` bundles, exported allocation XML, native
-  resource profiles, and `macos_memory_report.md`
-- On both platforms, native sampled CPU profiles and `cpu_profile_report.md`.
-  macOS uses Instruments Time Profiler; Linux uses `perf` when installed.
+In `outputs/<date>_<ref>-<version>_vs_<ref>/`:
 
-Both Markdown reports include a metric-by-metric branch comparison with absolute
-and percentage deltas. When Instruments statistics are available, the macOS
-report also compares persistent and transient allocation totals and highlights
-the ten allocation categories with the largest persistent-memory changes.
+| File | Contents |
+|---|---|
+| `report.md` | Memory table, per-process detail, CPU symbols, equivalence check |
+| `results.tsv` | Every measurement, one row each — the input for your own analysis |
+| `manifest.tsv` | Settings used and per-profiler exit status |
+| `run.log` | Everything the subprocesses printed |
+| `massif_*`, `cpu_*` | Raw artifacts for `ms_print` and `perf report` |
+| `lib/`, `Makevars.*` | The builds and flags that produced the results |
 
-On Linux, child processes are profiled separately. The Markdown summary uses
-the process with the highest total peak for each ref and lists all process
-profiles. Use `ms_print` on an individual `.out.<pid>` file to inspect its
-allocation tree.
+For the metrics the report leaves out — heap breakdown, paging, allocation
+categories, measurement coverage — with an explanation of each:
 
-The macOS report compares maximum resident set size and also records Apple's
-peak-memory-footprint metric, timing, paging, and swap data. These physical-memory
-metrics are broader than Massif heap usage, so results should only be compared
-within the same operating system and profiler type.
+```bash
+Rscript R/additional_report_metrics.R          # newest run, or pass a run directory
+```
 
-The `.trace` bundles contain the closest macOS equivalent to Massif's detailed
-allocation data: allocation lifetimes, persistent and transient bytes, types,
-counts, and stack traces. Open them in Instruments for interactive analysis. The
-script also exports the Allocations Statistics table as XML for automation.
+## How it works
 
-Instruments requires Xcode and permission for the calling application under
-**System Settings → Privacy & Security → Developer Tools**. If capture is denied,
-the script reports the failure and still completes the RSS/footprint benchmark.
-Set `MACOS_INSTRUMENTS=0` to intentionally skip Instruments capture.
+```
+R/main.R                    settings and preflight checks
+  └─ run_fims_benchmark()   R/run_benchmark.R: setup, orchestration, reporting
+       ├─ install           one library per ref per build type
+       ├─ profile           scripts/memory.sh, scripts/performance.sh
+       │                      └─ R/run_stage.R
+       │                           make_fims_fixture()
+       │                           wait for the recorder to attach
+       │                           run_fims_stages()
+       └─ report            scripts/collect.py → results.tsv
+                            scripts/report.py  → report.md
+```
 
-The runner starts R with a short delay and attaches Instruments to its live
-process, avoiding a race with the `Rscript` launcher. The defaults can be tuned
-for unusually slow hosts or long benchmarks with
-`FIMS_INSTRUMENTS_ATTACH_DELAY=10` (seconds) and
-`INSTRUMENTS_TIME_LIMIT=60m`.
+Each ref is installed twice, into `lib/debug/<ref>` and `lib/profile/<ref>`,
+using `scripts/Makevars.debug` (`-O0`, for Valgrind's allocation attribution)
+and `scripts/Makevars.profile` (`-O2`, so CPU profiles rank the code anyone
+actually runs). Both keep `-g`, frame pointers, and default symbol visibility.
+`R_MAKEVARS_USER` points at them, so `~/.R/Makevars` is never involved.
 
-CPU profiling is enabled by default. Set `CPU_PROFILE=0` to skip it. Linux hosts
-need the platform's `perf` package and permission to collect performance events.
+The model runs **once** per profiler. The fixture is built inside the profiled
+process, and the recorder starts after it — `perf -D` and Instruments attach
+during a short wait, so the data preparation stays out of the recording.
+Valgrind instruments from the first instruction and cannot do this, which is
+why every ref also gets a fixture-only baseline run: the report subtracts it to
+report what the stage itself cost.
+
+The shell scripts take one measurement each and can be run by hand:
+
+```bash
+scripts/memory.sh --tool massif --lib outputs/<run>/lib/debug/main \
+  --stage initialize --out /tmp/one.out
+```
+
+## Notes
+
+- `--trace-children` is off. TMB's C++ runs inside the R process, in a shared
+  library, so it is already instrumented; tracing children only profiled the
+  helper processes R spawns at start-up.
+- Massif runs with its default `--threshold`. Setting it to 0 keeps every entry
+  in every detailed snapshot tree, which on R plus TMB stacks produced output
+  files approaching a gigabyte per process.
+- `-O0` is slow on Eigen and TMB templates, and Valgrind multiplies it. If a run
+  is impractical, `-Og` in `scripts/Makevars.debug` keeps most of the speed.
+- Two FIMS builds cannot be loaded into one R process, so every comparison is
+  made across separate processes.
+
+## To do
+
+- **R-level profiling.** Nothing measures wall-clock time yet; that belongs in R
+  with `bench::mark()`, which also reports GC and R-level allocation. Such a
+  script must: set `.libPaths()` to `lib/profile/<ref>` **before** `library(FIMS)`
+  (the `-O2` build, not `-O0`); run one session per ref, because two builds
+  cannot coexist in one process; and write rows in the `results.tsv` shape, which
+  `collect.py --tidy` merges and `report.py` then reports.
+- **Rprof and jointprof**, for R-level and mixed R/C++ call stacks.
+  `scripts/run_pprof_linux.sh` is a scratch note, not a runnable script, and
+  `profiles = "r"` is not implemented.
+- **Scalability.** Parameterize the fixture by model size and report cost against
+  it. The tuned parameter values in `make_fims_fixture()` are tied to
+  `data_big`'s dimensions, so a scaling fixture needs `create_default_parameters()`
+  output instead.
+- **Back-to-back runs.** Run the model K times in one session, recording elapsed
+  time, `gc()` and RSS per iteration, to see whether memory or time grows. This
+  is the direct test of the `clear` and `release` teardown modes.
+- **Record `RemoteSha`** in `refs.tsv` and the report header, so a run states the
+  exact commit of each branch. Two branches can share a `DESCRIPTION` version.
+- **Accept `branch@sha`** in `install_fims_debug()`. Passing `ref = "main@8bdd020"`
+  builds an invalid GitHub URL; only the bare SHA or branch name works today.
+- **`.devcontainer/devcontainer.json`** still runs `postCreate.sh`, which was
+  deleted. A fresh container will fail its post-create step.
+- **The macOS path is untested.** Instruments capture, the allocation statistics
+  export, and `/usr/bin/time -l` parsing have only been exercised with stubs.

@@ -13,13 +13,13 @@
 
 # ---- settings ---------------------------------------------------------------
 
-ref_first <- "main"
-ref_compare <- "xptr-refactor"
+ref_first <- "8bdd020"
+ref_compare <- "update-R-with-XPtr-interface"
 
 # The ladder is cumulative, so "sdreport" times every phase in one pass:
 # initialize, assemble, tape, evaluate, optimize, sdreport. Use "initialize" to
 # spend the whole run on interface construction.
-stage <- "sdreport"
+stage <- "initialize"
 
 # "none" leaves the interface objects alive, so the heap at exit is what the run
 # retained. "clear" and "release" test whether that memory is returned.

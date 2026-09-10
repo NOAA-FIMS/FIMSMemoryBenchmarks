@@ -237,6 +237,36 @@ samples_text <- paste(
   "More iterations (cpu_reps) narrow the spread."
 )
 
+# ---- 6. where CPU time went, by shared object -------------------------------
+
+cpu_rows <- measurements |>
+  filter(source == "cpu", grepl("^symbol:", metric), !is.na(number))
+
+cpu_objects <- NULL
+if (nrow(cpu_rows)) {
+  cpu_objects <- cpu_rows |>
+    mutate(
+      object = sub("^symbol:", "", metric),
+      object = ifelse(grepl("::", object, fixed = TRUE),
+                      sub("::.*$", "", object), "unknown")
+    ) |>
+    group_by(ref, object) |>
+    summarise(percent = sum(number, na.rm = TRUE), .groups = "drop") |>
+    tidyr::pivot_wider(names_from = ref, values_from = percent, values_fill = 0) |>
+    arrange(desc(.data[[refs[[1]]]]))
+  for (column in intersect(names(cpu_objects), refs)) {
+    cpu_objects[[column]] <- sprintf("%.1f%%", cpu_objects[[column]])
+  }
+}
+
+cpu_text <- paste(
+  "Sampled CPU time grouped by the library it was spent in, across the symbols",
+  "the profiler ranked highest. `FIMS.so` is the interface code being compared;",
+  "`libR.so` is R's own evaluator, and time there usually means the R side of a",
+  "call rather than the C++ side. Percentages are of sampled time, so they do",
+  "not sum to 100."
+)
+
 # ---- write it out -----------------------------------------------------------
 
 lines <- c(
@@ -254,8 +284,29 @@ lines <- c(
   section("Time inside and outside the program", os_time_text, os_time),
   section("Paging and swapping", paging_text, paging),
   section("Allocation categories that changed most", category_text, category_changes),
-  section("Timing samples and spread", samples_text, samples)
+  section("Timing samples and spread", samples_text, samples),
+  section("CPU time by library", cpu_text, cpu_objects)
 )
+
+# An empty report is confusing on its own; say what the run did and did not
+# collect, and what would have to be present for each section to appear.
+if (!any(grepl("^## ", lines))) {
+  present <- sort(unique(measurements$source))
+  lines <- c(
+    lines,
+    "## Nothing to report",
+    "",
+    paste0("This run collected only: ", paste(present, collapse = ", "), "."),
+    "",
+    "- Heap breakdown and measurement coverage need Valgrind data (`massif` rows).",
+    "- Paging, CPU split and allocation categories are macOS only.",
+    "- Timing samples need rows written by the R-level timing script.",
+    "",
+    paste("If a memory profile was requested and there are no `massif` rows, check",
+          "run.log for \"no Massif files matched\": the profiler ran but wrote nothing."),
+    ""
+  )
+}
 
 output_file <- file.path(run_dir, "additional_metrics.md")
 writeLines(lines, output_file)

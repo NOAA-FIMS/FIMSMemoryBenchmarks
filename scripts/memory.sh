@@ -62,7 +62,7 @@ WORKLOAD="$REPO_ROOT/R/run_stage.R"
 DELAY_FOR_RUN=0
 
 run_workload() {
-  R_LIBS_USER="$LIB" \
+  R_LIBS="$LIB" \
     REPO_ROOT="$REPO_ROOT" \
     FIMS_STAGE="$STAGE" \
     STAGE_MODE="$STAGE_MODE" \
@@ -76,9 +76,14 @@ case "$TOOL" in
   massif)
     command -v valgrind >/dev/null 2>&1 || { echo "Error: valgrind not found." >&2; exit 1; }
     echo "=== Massif: stage=$STAGE mode=$STAGE_MODE -> ${OUT}_<pid> ==="
+    # Massif's defaults exist for a reason: --threshold=0 keeps every entry in
+    # every detailed snapshot tree, which on R plus TMB stacks produced output
+    # files approaching a gigabyte per process and filled the disk.
+    # --trace-children is required, not optional: Rscript is a launcher that
+    # execs the real R binary, and without this Valgrind stops at the exec and
+    # writes no output at all. It also means one file per process, so collect.py
+    # takes the largest peak.
     run_workload valgrind --tool=massif \
-      --threshold=0 \
-      --peak-inaccuracy=0 \
       --trace-children=yes \
       --massif-out-file="${OUT}_%p" \
       --log-file="$LOG" \

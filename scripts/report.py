@@ -324,10 +324,13 @@ def cpu_section(rows, refs, platform_name) -> list[str]:
         unit = "Samples" if platform_name == "Darwin" else "Overhead"
         total = sum(value for _, value in ranked) or 1.0
         lines += [f"### `{ref}`", ""]
-        lines += table(["Rank", "Symbol", unit], ["r", "l", "r"])
+        lines += table(["Rank", "Object", "Symbol", unit], ["r", "l", "l", "r"])
         for rank, (symbol, value) in enumerate(ranked, 1):
+            dso, _, name = symbol.partition("::")
+            if not name:
+                dso, name = "", dso
             shown = f"{value / total * 100:.2f}%" if platform_name == "Darwin" else f"{value:.2f}%"
-            lines.append(f"| {rank} | `{symbol.replace('|', chr(92) + '|')}` | {shown} |")
+            lines.append(f"| {rank} | {dso} | `{name.replace('|', chr(92) + '|')}` | {shown} |")
         lines.append("")
     return lines
 

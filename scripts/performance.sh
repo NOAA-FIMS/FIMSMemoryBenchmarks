@@ -63,7 +63,7 @@ WORKLOAD="$REPO_ROOT/R/run_stage.R"
 DELAY_FOR_RUN=0
 
 run_workload() {
-  R_LIBS_USER="$LIB" \
+  R_LIBS="$LIB" \
     REPO_ROOT="$REPO_ROOT" \
     FIMS_STAGE="$STAGE" \
     STAGE_MODE=stage \
@@ -86,7 +86,10 @@ case "$TOOL" in
     delay_ms=$(( ATTACH_DELAY * 1000 ))
     if DELAY_FOR_RUN="$ATTACH_DELAY" run_workload \
       perf record -g -D "$delay_ms" -o "$OUT" -- Rscript "$WORKLOAD" >&2; then
-      perf report --stdio --sort comm,dso,symbol -i "$OUT" > "$REPORT" 2>/dev/null
+      # --no-children reports self time. Without it perf reports cumulative
+      # time, which ranks call-graph roots (R's evaluator) rather than the
+      # functions actually running.
+      perf report --stdio --no-children --sort dso,symbol -i "$OUT" > "$REPORT" 2>/dev/null
       echo "captured"
     else
       echo "failed"
