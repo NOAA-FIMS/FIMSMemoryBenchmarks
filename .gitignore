@@ -52,4 +52,4 @@ rsconnect/
 fims.log
 outputs/*
 !outputs/.gitkeep
-_pycache_/*
+*.pyc
