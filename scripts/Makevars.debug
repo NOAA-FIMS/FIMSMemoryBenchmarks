@@ -12,11 +12,11 @@
 #    ignores CXXFLAGS entirely. Setting only CXXFLAGS silently does nothing.
 #
 # allocation sites map back to source exactly.
-CFLAGS      = -O0 -g -fno-omit-frame-pointer -fvisibility=default
-CXXFLAGS    = -O0 -g -fno-omit-frame-pointer -fvisibility=default
-CXX11FLAGS  = -O0 -g -fno-omit-frame-pointer -fvisibility=default
-CXX14FLAGS  = -O0 -g -fno-omit-frame-pointer -fvisibility=default
-CXX17FLAGS  = -O0 -g -fno-omit-frame-pointer -fvisibility=default
-CXX20FLAGS  = -O0 -g -fno-omit-frame-pointer -fvisibility=default
+CFLAGS      = -O1 -g -fno-omit-frame-pointer -fvisibility=default
+CXXFLAGS    = -O1 -g -fno-omit-frame-pointer -fvisibility=default
+CXX11FLAGS  = -O1 -g -fno-omit-frame-pointer -fvisibility=default
+CXX14FLAGS  = -O1 -g -fno-omit-frame-pointer -fvisibility=default
+CXX17FLAGS  = -O1 -g -fno-omit-frame-pointer -fvisibility=default
+CXX20FLAGS  = -O1 -g -fno-omit-frame-pointer -fvisibility=default
 CXX_VISIBILITY =
 C_VISIBILITY   =

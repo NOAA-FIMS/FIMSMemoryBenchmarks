@@ -21,6 +21,7 @@ set -euo pipefail
 TOOL=""
 LIB=""
 STAGE="${FIMS_STAGE:-initialize}"
+SIZE="${FIMS_SIZE:-normal}"
 STAGE_MODE="stage"
 TEARDOWN="${TEARDOWN:-none}"
 OUT=""
@@ -35,6 +36,7 @@ while [[ $# -gt 0 ]]; do
     --tool) TOOL="$2"; shift 2 ;;
     --lib) LIB="$2"; shift 2 ;;
     --stage) STAGE="$2"; shift 2 ;;
+    --size) SIZE="$2"; shift 2 ;;
     --mode) STAGE_MODE="$2"; shift 2 ;;
     --teardown) TEARDOWN="$2"; shift 2 ;;
     --out) OUT="$2"; shift 2 ;;
@@ -65,6 +67,8 @@ run_workload() {
   R_LIBS="$LIB" \
     REPO_ROOT="$REPO_ROOT" \
     FIMS_STAGE="$STAGE" \
+  FIMS_SIZE="$SIZE" \
+    FIMS_SIZE="$SIZE" \
     STAGE_MODE="$STAGE_MODE" \
     TEARDOWN="$TEARDOWN" \
     STAGE_SIGNATURE_OUT="$SIGNATURE" \
@@ -118,6 +122,14 @@ case "$TOOL" in
       if ! xctrace export --input "$OUT" \
         --xpath '/trace-toc/run[@number="1"]/tracks/track[@name="Allocations"]/details/detail[@name="Statistics"]' \
         --output "${OUT%.trace}_statistics.xml"; then
+        status="captured-export-failed"
+      fi
+      # The allocation list, which summarize_macos.py reads to attribute
+      # still-live memory to TMB/TMBad, Quadra, Rcpp or the R runtime. Without
+      # this export the origins table in the report is empty.
+      if ! xctrace export --input "$OUT" \
+        --xpath '/trace-toc/run[@number="1"]/tracks/track[@name="Allocations"]/details/detail[@name="Allocations List"]' \
+        --output "${OUT%.trace}_allocations.xml"; then
         status="captured-export-failed"
       fi
     else

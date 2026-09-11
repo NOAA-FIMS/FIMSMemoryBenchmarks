@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 # The workload the C++ profilers record. Runs the model once.
 #
-#   make_fims_fixture()  ->  wait for the recorder  ->  run_fims_stages()
+#   setup_fims_inputs()  ->  wait for the recorder  ->  setup_fims_model()
 #
 # The wait matters: profilers that attach to a live process (Instruments) or
 # start late (perf -D) begin recording after the fixture is built, so the data
@@ -10,7 +10,10 @@
 #
 # Environment:
 #   REPO_ROOT             repository root
-#   FIMS_STAGE            ladder rung, or "helper" for the end-to-end fit
+#   FIMS_STAGE            ladder rung, "helper" for the end-to-end fit, or
+#                         "validation" for the joint objective comparison
+#   FIMS_SIZE             fixture size: "normal" (30 years) or "large" (120)
+#   VALIDATION_OUT        where to save the validation RDS
 #   STAGE_MODE            "stage" runs the rung; "fixture" stops after the
 #                         fixture, which is the baseline the report subtracts
 #   TEARDOWN              none, clear, or release
@@ -32,13 +35,15 @@ source(file.path(Sys.getenv("REPO_ROOT", getwd()), "R", "setup_FIMS.R"))
 library(FIMS)
 
 stage <- Sys.getenv("FIMS_STAGE", "initialize")
+size <- Sys.getenv("FIMS_SIZE", "normal")
+validation_out <- Sys.getenv("VALIDATION_OUT")
 stage_mode <- Sys.getenv("STAGE_MODE", "stage")
 teardown <- Sys.getenv("TEARDOWN", "none")
 n_eval <- max(suppressWarnings(as.integer(Sys.getenv("FIMS_N_EVAL", "1"))), 1L, na.rm = TRUE)
 signature_out <- Sys.getenv("STAGE_SIGNATURE_OUT")
 attach_delay <- suppressWarnings(as.numeric(Sys.getenv("STAGE_ATTACH_DELAY", "0")))
 
-fixture <- make_fims_fixture()
+fixture <- setup_fims_inputs(size = size)
 
 # The baseline run: this process holds the fixture and nothing the interface
 # allocated, so subtracting it leaves what the stage is responsible for.
@@ -53,8 +58,17 @@ if (!is.na(attach_delay) && attach_delay > 0) {
 
 result <- if (identical(stage, "helper")) {
   list(signature = list(), fit = run_fims_helper(fixture))
+} else if (identical(stage, "validation")) {
+  # The joint objective fit. Saved as RDS because R/summarize_validation.R and
+  # the final reports read the whole structure, not a summary of it.
+  validation <- run_fims_validation(fixture)
+  if (nzchar(validation_out)) {
+    saveRDS(validation, validation_out)
+    message("--> Validation result written to ", validation_out)
+  }
+  list(signature = list(nll = validation$final_objective), validation = validation)
 } else {
-  run_fims_stages(fixture, stage = stage, teardown = teardown, n_eval = n_eval)
+  setup_fims_model(fixture, stage = stage, teardown = teardown, n_eval = n_eval)
 }
 
 # Written after the measured work, so it cannot affect the peak.

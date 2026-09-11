@@ -9,7 +9,8 @@ results are collected into one table and one report.
 
 - R with `remotes`, `bench`, `dplyr`, `tidyr`, and FIMS's own dependencies
 - `python3` for the collector and reporter
-- Linux: `valgrind`, and `perf` for CPU profiles
+- Linux: `valgrind`, `perf` for CPU profiles, and GNU `time` (`apt install
+  time`) if you want build cost recorded
 - macOS: Xcode, for `xctrace`
 
 Keep **no FIMS installed in your user or site library**. Each run installs the
@@ -32,7 +33,7 @@ source("R/run_benchmark.R")
 run_fims_benchmark("main", "xptr-refactor", stage = "initialize")
 ```
 
-`stage` is a rung of the ladder in `run_fims_stages()`: `initialize`,
+`stage` is a rung of the ladder in `setup_fims_model()`: `initialize`,
 `assemble`, `tape`, `evaluate`, `optimize`, `sdreport`, or `helper` for the
 end-to-end `fit_fims()` path. The ladder is cumulative, so `sdreport` runs
 everything below it.
@@ -65,11 +66,14 @@ R/main.R                    settings and preflight checks
        ├─ install           one library per ref per build type
        ├─ profile           scripts/memory.sh, scripts/performance.sh
        │                      └─ R/run_stage.R
-       │                           make_fims_fixture()
+       │                           setup_fims_inputs()
        │                           wait for the recorder to attach
-       │                           run_fims_stages()
-       └─ report            scripts/collect.py → results.tsv
-                            scripts/report.py  → report.md
+       │                           setup_fims_model()
+       └─ report            summarize_cpu.py, summarize_massif.py or
+                            summarize_macos.py, summarize_validation.R,
+                            check_leaks.py, then final_report.R and
+                            management_summary.R; each also emits tidy rows,
+                            merged by scripts/tidy.py into results.tsv
 ```
 
 Each ref is installed twice, into `lib/debug/<ref>` and `lib/profile/<ref>`,
@@ -105,6 +109,20 @@ scripts/memory.sh --tool massif --lib outputs/<run>/lib/debug/main \
 - Two FIMS builds cannot be loaded into one R process, so every comparison is
   made across separate processes.
 
+## Tests
+
+```bash
+PYTHONPATH=scripts python3 -m unittest discover -s scripts -p "test_*.py"
+Rscript scripts/test_multi_refs.R
+Rscript scripts/test_quadra_backend.R
+```
+
+`test_check_leaks.py` and `test_console_summary.py` cover the leak parser and the
+console summary, `test_multi_reports.py` covers ref resolution and N-ref
+rendering, `test_multi_refs.R` covers `resolve_refs()`, and
+`test_quadra_backend.R` covers backend selection. None of them need FIMS
+installed.
+
 ## To do
 
 - **R-level profiling.** Nothing measures wall-clock time yet; that belongs in R
@@ -114,20 +132,19 @@ scripts/memory.sh --tool massif --lib outputs/<run>/lib/debug/main \
   cannot coexist in one process; and write rows in the `results.tsv` shape, which
   `collect.py --tidy` merges and `report.py` then reports.
 - **Rprof and jointprof**, for R-level and mixed R/C++ call stacks.
-  `scripts/run_pprof_linux.sh` is a scratch note, not a runnable script, and
-  `profiles = "r"` is not implemented.
-- **Scalability.** Parameterize the fixture by model size and report cost against
-  it. The tuned parameter values in `make_fims_fixture()` are tied to
-  `data_big`'s dimensions, so a scaling fixture needs `create_default_parameters()`
-  output instead.
+  `scripts/run_pprof_linux.sh` holds the gperftools recipe as a reference for
+  this work; `profiles = "r"` is not implemented.
+- **Scalability reporting.** `setup_fims_inputs(size = "large")` builds the
+  120-year model and `results.tsv` carries a `size` column, but nothing yet
+  renders cost against size; that comparison is still done by hand.
 - **Back-to-back runs.** Run the model K times in one session, recording elapsed
   time, `gc()` and RSS per iteration, to see whether memory or time grows. This
   is the direct test of the `clear` and `release` teardown modes.
-- **Record `RemoteSha`** in `refs.tsv` and the report header, so a run states the
-  exact commit of each branch. Two branches can share a `DESCRIPTION` version.
-- **Accept `branch@sha`** in `install_fims_debug()`. Passing `ref = "main@8bdd020"`
-  builds an invalid GitHub URL; only the bare SHA or branch name works today.
-- **`.devcontainer/devcontainer.json`** still runs `postCreate.sh`, which was
-  deleted. A fresh container will fail its post-create step.
+- **`scripts/test_multi_refs.R` needs FIMS installed** only if you extend it
+  past ref handling; as written it checks `resolve_refs()` and runs anywhere.
+- **Validation results are cached** in `outputs/.validation-cache`, keyed by ref,
+  commit and size, so every memory run can compose `final_report.md` without
+  re-fitting. Nothing prunes that cache; delete it when the builds change under
+  you in ways the commit does not capture (a Makevars edit, say).
 - **The macOS path is untested.** Instruments capture, the allocation statistics
   export, and `/usr/bin/time -l` parsing have only been exercised with stubs.

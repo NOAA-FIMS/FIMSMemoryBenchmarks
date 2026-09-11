@@ -1,0 +1,439 @@
+#!/usr/bin/env python3
+"""Create a Markdown summary from one or more Valgrind Massif runs."""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import glob
+import os
+import re
+from dataclasses import dataclass
+from pathlib import Path
+
+from tidy import write_rows
+from typing import Optional
+
+
+@dataclass
+class Profile:
+    path: Path
+    command: str = "unknown"
+    time_unit: str = "unknown"
+    snapshots: int = 0
+    peak_snapshot: int = 0
+    peak_time: int = 0
+    peak_heap: int = 0
+    peak_extra: int = 0
+    peak_stacks: int = 0
+    peak_origins: dict[str, int] | None = None
+    peak_attributed_heap: int = 0
+    final_heap: int = 0
+    final_extra: int = 0
+    final_stacks: int = 0
+
+    @property
+    def peak_total(self) -> int:
+        return self.peak_heap + self.peak_extra + self.peak_stacks
+
+    @property
+    def retained_total(self) -> int:
+        """Heap still allocated at the last snapshot: the state the process exited in.
+
+        For a run that stops after the measured stage, this is what the stage
+        kept, as opposed to the transient high-water mark.
+        """
+        return self.final_heap + self.final_extra + self.final_stacks
+
+
+@dataclass
+class Run:
+    ref: str
+    version: str
+    prefix: Path
+    profiles: list[Profile]
+    baseline: "Optional[Profile]" = None
+
+    @property
+    def stage_peak(self) -> "Optional[int]":
+        """Peak above the fixture-only run: what the stage itself allocated."""
+        primary = self.primary
+        if primary is None or self.baseline is None:
+            return None
+        return primary.peak_total - self.baseline.peak_total
+
+    @property
+    def stage_retained(self) -> "Optional[int]":
+        primary = self.primary
+        if primary is None or self.baseline is None:
+            return None
+        return primary.retained_total - self.baseline.retained_total
+
+    @property
+    def primary(self) -> Optional[Profile]:
+        return max(self.profiles, key=lambda item: item.peak_total, default=None)
+
+
+def parse_massif(path: Path) -> Profile:
+    profile = Profile(path=path)
+    current: dict[str, int] = {}
+    tree_lines: list[str] = []
+
+    def origin(stack: str) -> str:
+        symbol = stack.lower()
+        if "quadra" in symbol:
+            return "Quadra"
+        if "tmbad" in symbol or re.search(r"\btmb(?:::|\b)", symbol):
+            return "TMB/TMBad"
+        if "rcpp" in symbol:
+            return "Rcpp"
+        if re.search(r"\b(rf_|r_|libr(?:\.so)?\b)", symbol):
+            return "R runtime"
+        if "fims" in symbol:
+            return "FIMS C++ (backend not explicit)"
+        return "System/other/unresolved"
+
+    def parse_tree() -> tuple[dict[str, int], int]:
+        origins: dict[str, int] = {}
+        attributed = 0
+        ancestors: list[tuple[int, str]] = []
+        for line in tree_lines:
+            match = re.match(r"^(\s*)n(\d+):\s+(\d+)\s+(.*)$", line)
+            if not match:
+                continue
+            indent = len(match.group(1))
+            child_count = int(match.group(2))
+            size = int(match.group(3))
+            frame = match.group(4)
+            while ancestors and ancestors[-1][0] >= indent:
+                ancestors.pop()
+            stack = " ".join(item[1] for item in ancestors) + " " + frame
+            if child_count == 0:
+                category = origin(stack)
+                origins[category] = origins.get(category, 0) + size
+                attributed += size
+            else:
+                ancestors.append((indent, frame))
+        return origins, attributed
+
+    def finish_snapshot() -> None:
+        if "snapshot" not in current:
+            return
+        profile.snapshots += 1
+        total = sum(current.get(key, 0) for key in ("mem_heap_B", "mem_heap_extra_B", "mem_stacks_B"))
+        if total >= profile.peak_total:
+            profile.peak_snapshot = current["snapshot"]
+            profile.peak_time = current.get("time", 0)
+            profile.peak_heap = current.get("mem_heap_B", 0)
+            profile.peak_extra = current.get("mem_heap_extra_B", 0)
+            profile.peak_stacks = current.get("mem_stacks_B", 0)
+            profile.peak_origins, profile.peak_attributed_heap = parse_tree()
+        # Snapshots are written in order, so the last one is the exit state.
+        profile.final_heap = current.get("mem_heap_B", 0)
+        profile.final_extra = current.get("mem_heap_extra_B", 0)
+        profile.final_stacks = current.get("mem_stacks_B", 0)
+
+    with path.open(encoding="utf-8", errors="replace") as stream:
+        for raw_line in stream:
+            line = raw_line.rstrip("\n")
+            if line.startswith("cmd:"):
+                profile.command = line[4:].strip()
+            elif line.startswith("time_unit:"):
+                profile.time_unit = line.split(":", 1)[1].strip()
+            elif line.startswith("snapshot="):
+                finish_snapshot()
+                current = {"snapshot": int(line.split("=", 1)[1])}
+                tree_lines = []
+            elif re.match(r"^\s*n\d+:\s+\d+\s+", line):
+                tree_lines.append(line)
+            elif "=" in line:
+                key, value = line.split("=", 1)
+                if key in {"time", "mem_heap_B", "mem_heap_extra_B", "mem_stacks_B"}:
+                    try:
+                        current[key] = int(value)
+                    except ValueError:
+                        pass
+    finish_snapshot()
+    return profile
+
+
+def human_bytes(value: int) -> str:
+    units = ("B", "KiB", "MiB", "GiB", "TiB")
+    amount = float(value)
+    for unit in units:
+        if abs(amount) < 1024 or unit == units[-1]:
+            return f"{amount:,.0f} {unit}" if unit == "B" else f"{amount:,.2f} {unit}"
+        amount /= 1024
+    raise AssertionError("unreachable")
+
+
+def signed_bytes(baseline: int, comparison: int) -> str:
+    delta = comparison - baseline
+    prefix = "+" if delta > 0 else "−" if delta < 0 else ""
+    return f"{prefix}{human_bytes(abs(delta))}"
+
+
+def percent_delta(baseline: int, comparison: int) -> str:
+    if baseline == 0:
+        return "0.00%" if comparison == 0 else "n/a"
+    return f"{(comparison - baseline) / baseline * 100:+.2f}%"
+
+
+def describe_bytes(label: str, baseline: int, comparison: int) -> str:
+    delta = comparison - baseline
+    if delta == 0:
+        return f"{label} was unchanged at {human_bytes(comparison)}."
+    direction = "increased" if delta > 0 else "decreased"
+    return (
+        f"{label} {direction} by {human_bytes(abs(delta))} "
+        f"({percent_delta(baseline, comparison)}), from {human_bytes(baseline)} to {human_bytes(comparison)}."
+    )
+
+
+def md_escape(value: str) -> str:
+    return value.replace("|", "\\|").replace("\n", " ")
+
+
+def relative(path: Path, report_path: Path) -> str:
+    return os.path.relpath(path, report_path.parent)
+
+
+def render(runs: list[Run], report_path: Path) -> str:
+    timestamp = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat()
+    lines = [
+        "# FIMS Valgrind Massif Benchmark Report",
+        "",
+        f"Generated: `{timestamp}`",
+        "",
+        "## Summary",
+        "",
+        "Massif measures allocated heap memory over the lifetime of each process. "
+        "The peak below is heap plus allocator overhead and stacks. It is not a leak count.",
+        "",
+        "| Git ref | FIMS version | Peak total | Heap | Heap overhead | Stacks | Snapshots |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+    ]
+    for run in runs:
+        peak = run.primary
+        if peak is None:
+            lines.append(f"| {md_escape(run.ref)} | {md_escape(run.version)} | no data | — | — | — | — |")
+        else:
+            lines.append(
+                f"| {md_escape(run.ref)} | {md_escape(run.version)} | **{human_bytes(peak.peak_total)}** "
+                f"| {human_bytes(peak.peak_heap)} | {human_bytes(peak.peak_extra)} "
+                f"| {human_bytes(peak.peak_stacks)} | {peak.snapshots:,} |"
+            )
+
+    valid = [run for run in runs if run.primary is not None]
+    for comparison in valid[1:] if valid and valid[0] is runs[0] else []:
+        baseline = runs[0]
+        baseline_peak = baseline.primary.peak_total  # type: ignore[union-attr]
+        delta = comparison.primary.peak_total - baseline_peak  # type: ignore[union-attr]
+        percent = (delta / baseline_peak * 100) if baseline_peak else 0.0
+        if delta == 0:
+            comparison_text = (
+                f"`{comparison.ref}` and `{baseline.ref}` had **the same peak memory** "
+                f"({human_bytes(baseline_peak)}; {percent:+.2f}%)."
+            )
+        else:
+            direction = "more" if delta > 0 else "less"
+            comparison_text = (
+                f"`{comparison.ref}` used **{human_bytes(abs(delta))} {direction} peak memory** than "
+                f"`{baseline.ref}` ({percent:+.2f}%)."
+            )
+        first = baseline.primary
+        second = comparison.primary
+        lines.extend([
+            "", f"## Detailed branch comparison: {comparison.ref} vs {baseline.ref}", "", comparison_text, "",
+            "Positive deltas mean the comparison ref used more memory; negative deltas mean less.",
+            "",
+            f"| Metric | `{baseline.ref}` | `{comparison.ref}` | Delta | Change |",
+            "|---|---:|---:|---:|---:|",
+            f"| Peak total | {human_bytes(first.peak_total)} | {human_bytes(second.peak_total)} | {signed_bytes(first.peak_total, second.peak_total)} | {percent_delta(first.peak_total, second.peak_total)} |",
+            f"| Heap bytes | {human_bytes(first.peak_heap)} | {human_bytes(second.peak_heap)} | {signed_bytes(first.peak_heap, second.peak_heap)} | {percent_delta(first.peak_heap, second.peak_heap)} |",
+            f"| Heap overhead | {human_bytes(first.peak_extra)} | {human_bytes(second.peak_extra)} | {signed_bytes(first.peak_extra, second.peak_extra)} | {percent_delta(first.peak_extra, second.peak_extra)} |",
+            f"| Stack bytes | {human_bytes(first.peak_stacks)} | {human_bytes(second.peak_stacks)} | {signed_bytes(first.peak_stacks, second.peak_stacks)} | {percent_delta(first.peak_stacks, second.peak_stacks)} |",
+            f"| Snapshots | {first.snapshots:,} | {second.snapshots:,} | {second.snapshots - first.snapshots:+,} | {percent_delta(first.snapshots, second.snapshots)} |",
+            "",
+            f"The peak occurred at Massif time `{first.peak_time:,}` for `{baseline.ref}` and `{second.peak_time:,}` for `{comparison.ref}`. "
+            "Massif time is instruction count by default, so this indicates execution position rather than wall-clock duration.",
+            "", "### Interpretation", "",
+            f"- {describe_bytes('Peak total memory', first.peak_total, second.peak_total)}",
+            f"- {describe_bytes('Peak heap memory', first.peak_heap, second.peak_heap)}",
+            f"- {describe_bytes('Allocator overhead at peak', first.peak_extra, second.peak_extra)}",
+            f"- {describe_bytes('Stack memory at peak', first.peak_stacks, second.peak_stacks)}",
+        ])
+
+        if first.peak_origins and second.peak_origins:
+            origins = (
+                "TMB/TMBad", "Quadra", "Rcpp", "R runtime",
+                "FIMS C++ (backend not explicit)", "System/other/unresolved",
+            )
+            lines.extend([
+                "", "### Peak heap allocation origins", "",
+                "Massif allocation-tree leaves are classified using their complete stack path "
+                "at the peak snapshot. Leaf bytes are counted once, avoiding parent-node double counting.",
+                "",
+                f"| Origin | `{baseline.ref}` bytes | Share | `{comparison.ref}` bytes | Share |",
+                "|---|---:|---:|---:|---:|",
+            ])
+            for origin in origins:
+                first_value = first.peak_origins.get(origin, 0)
+                second_value = second.peak_origins.get(origin, 0)
+                first_share = first_value / first.peak_attributed_heap * 100 if first.peak_attributed_heap else 0
+                second_share = second_value / second.peak_attributed_heap * 100 if second.peak_attributed_heap else 0
+                lines.append(
+                    f"| {origin} | {human_bytes(first_value)} | {first_share:.2f}% | "
+                    f"{human_bytes(second_value)} | {second_share:.2f}% |"
+                )
+            lines.extend([
+                "",
+                f"Attributed peak-tree bytes: {human_bytes(first.peak_attributed_heap)} for `{baseline.ref}` "
+                f"and {human_bytes(second.peak_attributed_heap)} for `{comparison.ref}`.",
+            ])
+
+    with_baseline = [run for run in runs if run.baseline is not None and run.primary is not None]
+    if with_baseline:
+        lines.extend([
+            "", "## Stage-attributable memory", "",
+            "Each ref was also profiled building the fixture and stopping before the "
+            "stage. Subtracting that leaves what the stage itself allocated, without R "
+            "start-up, the data, or the parameter edits, which are identical across refs.",
+            "",
+            "| Git ref | Fixture peak | Stage peak | Fixture retained | Stage retained |",
+            "|---|---:|---:|---:|---:|",
+        ])
+        for run in with_baseline:
+            lines.append(
+                f"| {md_escape(run.ref)} | {human_bytes(run.baseline.peak_total)} "
+                f"| **{human_bytes(run.stage_peak or 0)}** "
+                f"| {human_bytes(run.baseline.retained_total)} "
+                f"| **{human_bytes(run.stage_retained or 0)}** |"
+            )
+        if len(with_baseline) >= 2:
+            first, second = with_baseline[0], with_baseline[1]
+            lines.extend([
+                "",
+                f"- {describe_bytes('Stage peak', first.stage_peak or 0, second.stage_peak or 0)}",
+                f"- {describe_bytes('Stage retained', first.stage_retained or 0, second.stage_retained or 0)}",
+            ])
+        lines.append("")
+
+    lines.extend(["", "## Run details", ""])
+    for run in runs:
+        lines.extend([f"### `{run.ref}` (FIMS {run.version})", ""])
+        if not run.profiles:
+            lines.extend([f"No readable Massif files matched `{run.prefix.name}.*`.", ""])
+            continue
+        lines.extend([
+            "Because child tracing is enabled, a run may contain multiple process profiles. "
+            "The process with the largest peak is used in the summary.",
+            "",
+            "| Output file | Peak total | Peak snapshot | Peak time | Time unit | Command |",
+            "|---|---:|---:|---:|---|---|",
+        ])
+        for profile in sorted(run.profiles, key=lambda item: item.peak_total, reverse=True):
+            output = relative(profile.path, report_path)
+            lines.append(
+                f"| [{md_escape(profile.path.name)}]({md_escape(output)}) | {human_bytes(profile.peak_total)} "
+                f"| {profile.peak_snapshot} | {profile.peak_time:,} | {md_escape(profile.time_unit)} "
+                f"| `{md_escape(profile.command)}` |"
+            )
+        lines.append("")
+
+    lines.extend([
+        "## Interpretation notes",
+        "",
+        "- Compare peaks only when both branches ran the same model, stage, inputs, and Valgrind options.",
+        "- `Heap overhead` is Massif's estimate of allocator bookkeeping and alignment costs.",
+        "- `Stacks` is zero unless Massif stack profiling is enabled with `--stacks=yes`.",
+        "- Allocation origins use leaf bytes from the peak snapshot's complete stack paths.",
+        "- Use `ms_print <massif-output-file>` for the allocation tree and snapshot graph.",
+        "",
+    ])
+    return "\n".join(lines)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--run", nargs=3, action="append", metavar=("REF", "VERSION", "PREFIX"), required=True)
+    parser.add_argument("--baseline", nargs=2, action="append", default=[],
+                        metavar=("REF", "PREFIX"),
+                        help="fixture-only profile for REF, subtracted from its stage run")
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--tidy-out", type=Path,
+                        help="also write what was parsed as tidy rows")
+    args = parser.parse_args()
+
+    runs = []
+    for ref, version, prefix_text in args.run:
+        prefix = Path(prefix_text)
+        paths = [Path(item) for item in glob.glob(f"{glob.escape(str(prefix))}_*")]
+        if not paths:  # the older "<prefix>.<pid>" convention
+            paths = [Path(item) for item in glob.glob(f"{glob.escape(str(prefix))}.*")]
+        profiles = []
+        for path in sorted(paths):
+            try:
+                profiles.append(parse_massif(path))
+            except (OSError, ValueError) as error:
+                print(f"warning: could not parse {path}: {error}")
+        runs.append(Run(ref=ref, version=version, prefix=prefix, profiles=profiles))
+
+    # The fixture-only run for each ref, so the report can subtract R start-up,
+    # the data and the parameter edits and report the stage's own cost.
+    for ref, prefix_text in args.baseline:
+        prefix = Path(prefix_text)
+        found = []
+        for path in sorted(Path(item) for item in glob.glob(f"{glob.escape(str(prefix))}_*")):
+            try:
+                found.append(parse_massif(path))
+            except (OSError, ValueError):
+                continue
+        primary = max(found, key=lambda item: item.peak_total, default=None)
+        for run in runs:
+            if run.ref == ref:
+                run.baseline = primary
+
+    # The same parse that renders the report, as rows.
+    rows = []
+    byte_metrics = {"peak_total", "peak_heap", "peak_extra", "peak_stacks",
+                    "retained_total", "stage_peak", "stage_retained"}
+    for run in runs:
+        primary = run.primary
+        if primary is None:
+            continue
+        values = {
+            "peak_total": primary.peak_total, "peak_heap": primary.peak_heap,
+            "peak_extra": primary.peak_extra, "peak_stacks": primary.peak_stacks,
+            "retained_total": primary.retained_total, "snapshots": primary.snapshots,
+            "processes": len(run.profiles),
+        }
+        if run.baseline is not None:
+            values["stage_peak"] = run.stage_peak
+            values["stage_retained"] = run.stage_retained
+            values["fixture_peak"] = run.baseline.peak_total
+            values["fixture_retained"] = run.baseline.retained_total
+            byte_metrics |= {"fixture_peak", "fixture_retained"}
+        for metric, value in values.items():
+            rows.append({"ref": run.ref, "fims_version": run.version, "source": "massif",
+                         "metric": metric,
+                         "unit": "bytes" if metric in byte_metrics else "count",
+                         "value": value, "path": primary.path.name})
+        for profile in run.profiles:
+            for metric, value in (("process_peak_total", profile.peak_total),
+                                  ("process_retained_total", profile.retained_total),
+                                  ("process_snapshots", profile.snapshots)):
+                rows.append({"ref": run.ref, "fims_version": run.version, "source": "massif",
+                             "metric": metric,
+                             "unit": "bytes" if metric.endswith("total") else "count",
+                             "value": value, "path": profile.path.name})
+    write_rows(args.tidy_out, rows)
+
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(render(runs, args.output), encoding="utf-8")
+    print(f"Markdown report written to {args.output}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

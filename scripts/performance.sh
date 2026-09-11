@@ -22,6 +22,7 @@ set -euo pipefail
 TOOL=""
 LIB=""
 STAGE="${FIMS_STAGE:-initialize}"
+SIZE="${FIMS_SIZE:-normal}"
 TEARDOWN="${TEARDOWN:-none}"
 OUT=""
 REPORT=""
@@ -36,6 +37,7 @@ while [[ $# -gt 0 ]]; do
     --tool) TOOL="$2"; shift 2 ;;
     --lib) LIB="$2"; shift 2 ;;
     --stage) STAGE="$2"; shift 2 ;;
+    --size) SIZE="$2"; shift 2 ;;
     --teardown) TEARDOWN="$2"; shift 2 ;;
     --out) OUT="$2"; shift 2 ;;
     --report) REPORT="$2"; shift 2 ;;
@@ -66,6 +68,8 @@ run_workload() {
   R_LIBS="$LIB" \
     REPO_ROOT="$REPO_ROOT" \
     FIMS_STAGE="$STAGE" \
+  FIMS_SIZE="$SIZE" \
+    FIMS_SIZE="$SIZE" \
     STAGE_MODE=stage \
     TEARDOWN="$TEARDOWN" \
     FIMS_N_EVAL="$N_EVAL" \
