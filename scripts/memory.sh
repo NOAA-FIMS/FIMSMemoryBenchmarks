@@ -89,6 +89,7 @@ case "$TOOL" in
     # takes the largest peak.
     run_workload valgrind --tool=massif \
       --trace-children=yes \
+      --trace-children-skip=/bin/*,/usr/bin/* \
       --massif-out-file="${OUT}_%p" \
       --log-file="$LOG" \
       Rscript "$WORKLOAD"
