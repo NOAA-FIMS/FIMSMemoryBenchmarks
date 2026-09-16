@@ -17,6 +17,12 @@ CPU_SUMMARY_ARGS=()
 VALIDATION_ARGS=()
 LEAK_ARGS=()
 CONSOLE_ARGS=()
+MAINTAINABILITY_ARGS=()
+if [[ -x "$REPO_ROOT/.venv-maintainability/bin/python" ]]; then
+  MAINTAINABILITY_PYTHON="${MAINTAINABILITY_PYTHON:-$REPO_ROOT/.venv-maintainability/bin/python}"
+else
+  MAINTAINABILITY_PYTHON="${MAINTAINABILITY_PYTHON:-python3}"
+fi
 HOST_OS="$(uname -s)"
 
 run_ref() {
@@ -184,6 +190,13 @@ run_ref() {
     fi
     CPU_SUMMARY_ARGS+=(--run "$ref" "$fims_version" "$cpu_status" "$perf_report")
   fi
+  local maintainability_out="$OUTPUT_DIR/maintainability_${ref_safe}.json"
+  local installed_sha
+  installed_sha=$(Rscript -e 'sha <- packageDescription("FIMS")$RemoteSha; if (!is.null(sha)) cat(sha)')
+  "$MAINTAINABILITY_PYTHON" "$REPO_ROOT/scripts/maintainability.py" \
+    --ref "$ref" --sha "$installed_sha" --output "$maintainability_out"
+  MAINTAINABILITY_ARGS+=("$maintainability_out")
+
 }
 
 # Positional refs support any number of branches; environment defaults remain compatible.
@@ -228,6 +241,10 @@ else
   python3 "$REPO_ROOT/scripts/summarize_massif.py" "${SUMMARY_ARGS[@]}" --output "$REPORT_FILE"
 fi
 
+MAINTAINABILITY_REPORT_FILE="$OUTPUT_DIR/maintainability_report.md"
+"$MAINTAINABILITY_PYTHON" "$REPO_ROOT/scripts/maintainability.py" \
+  --report "${MAINTAINABILITY_ARGS[@]}" --output "$MAINTAINABILITY_REPORT_FILE" --quiet
+
 FINAL_REPORT_FILE="$OUTPUT_DIR/final_report.md"
 python3 "$REPO_ROOT/scripts/check_leaks.py" --report "${LEAK_ARGS[@]}" \
   --output "$OUTPUT_DIR/leak_report.md"
@@ -249,3 +266,7 @@ echo "Combined final report: $FINAL_REPORT_FILE"
 echo "Management summary: $MANAGEMENT_REPORT_FILE"
 python3 "$REPO_ROOT/scripts/console_summary.py" \
   --platform "$HOST_OS" "${CONSOLE_ARGS[@]}"
+
+# Repeat the compact source-metric table at the end alongside the runtime table.
+"$MAINTAINABILITY_PYTHON" "$REPO_ROOT/scripts/maintainability.py" \
+  --report "${MAINTAINABILITY_ARGS[@]}" --output "$MAINTAINABILITY_REPORT_FILE"

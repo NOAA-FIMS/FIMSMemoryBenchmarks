@@ -109,6 +109,10 @@ leak_report <- file.path(dirname(output), "leak_report.md")
 if (file.exists(leak_report)) {
   lines <- c(lines, embed_report("Leak detection", leak_report))
 }
+maintainability_report <- file.path(dirname(output), "maintainability_report.md")
+if (file.exists(maintainability_report)) {
+  lines <- c(lines, embed_report("Maintainability", maintainability_report))
+}
 while (length(lines) && identical(tail(lines, 1L), "")) {
   lines <- head(lines, -1L)
 }

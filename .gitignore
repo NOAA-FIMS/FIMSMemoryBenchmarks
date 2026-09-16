@@ -52,3 +52,7 @@ rsconnect/
 fims.log
 outputs/*
 !outputs/.gitkeep
+
+# Isolated source-metrics tooling
+.venv-maintainability/
+__pycache__/

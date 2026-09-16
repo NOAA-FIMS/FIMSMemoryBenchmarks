@@ -31,6 +31,90 @@ install_fims_profile(ref = "main")
 
 It installs `NOAA-FIMS/FIMS` from GitHub for a chosen branch/tag/commit using source compilation.
 
+## Maintainability metrics
+
+Set up the isolated source analyzer once:
+
+```bash
+python3 -m venv .venv-maintainability
+.venv-maintainability/bin/pip install -r scripts/requirements-maintainability.txt
+```
+
+The runner uses that environment automatically, or an interpreter selected with
+`MAINTAINABILITY_PYTHON`. After profiling each branch, it downloads the source
+archive for the installed package's `RemoteSha` and analyzes that exact commit.
+Source analysis is outside the build, runtime, and RSS measurements. If the
+analyzer, commit metadata, or source download is unavailable, it records an
+explicit unavailable result without aborting the performance benchmark.
+
+`maintainability_report.md`, per-branch `maintainability_<ref>.json`, the final
+report, management summary, and console table include:
+
+- R and C++ file counts and non-comment source lines (NLOC), reported separately.
+- Function counts and cyclomatic complexity: median, nearest-rank p95, maximum,
+  and the count above 15.
+- Function-size distributions and the highest-complexity functions with paths
+  and line numbers. JSON also records functions exceeding 100 NLOC.
+- Lizard's duplicated-token percentage, with a 70-token minimum match.
+- A path-based estimate of adapter/interface NLOC, with matching files in JSON.
+- A 0–100 lexical Maintainability Index (MI) estimate per file, with NLOC-weighted
+  and equal-file averages, per-language results, lower-tail scores, scoring coverage,
+  and the share of code in files below MI 20. Higher MI is better under this method.
+- Lowest-MI file hotspots with raw inputs, and same-path changes against the first
+  branch using fixed baseline NLOC weights. Added/removed files are counted separately.
+
+Analysis is limited to `R/`, `src/`, and `inst/include/`. Vendored directories
+(including Quadra, Eigen, LBFGSpp, and external), generated bindings and files
+marked as generated, tests, and examples are excluded. JSON inventories include
+file hashes, language, scope, duplicate groups, and per-function metrics so the
+classification can be audited. Local-source scans describe the working tree;
+only downloaded commit archives establish the installed-revision match.
+
+Branch coverage requires instrumented tests and is **not measured** here.
+Cognitive complexity, semantic coupling, and static-analysis findings are also
+explicitly unmeasured. Adapter NLOC is
+an estimate based on paths, not a coupling score. Review flags are not quality
+verdicts; compare like-for-like language and source scope. Metric definitions
+follow the pinned [Lizard analyzer](https://github.com/terryyin/lizard).
+
+The versioned MI method (`lexical-file-mi-v1`) uses the
+[Microsoft formula](https://learn.microsoft.com/en-us/visualstudio/code-quality/code-metrics-maintainability-index-range-and-meaning):
+
+```text
+MI = max(0, (171 - 5.2 ln(V) - 0.23 G - 16.2 ln(L)) * 100 / 171)
+V = (total operators + total operands) * log2(distinct operators + distinct operands)
+G = sum of Lizard function cyclomatic complexity within the file
+L = file NLOC
+```
+
+Halstead counts use the pinned lexer: keywords and punctuation are operators;
+identifiers, function names, and literals are operands. Comments and C++
+preprocessor directives are excluded from volume. Macros are not expanded and
+C++ template syntax is not semantically resolved. All raw counts are in JSON.
+This is an **estimate**, not an implementation of Visual Studio's analyzer.
+There is no comment bonus, and zero-volume/empty files are unscored. Top-level
+logic and parser limitations can undercount complexity. Parser warnings make a
+result partial; old JSON without MI shows “Not measured” until reanalyzed.
+
+Overall MI is the NLOC-weighted mean of file scores, not a score computed from
+concatenated branch totals. Equal-file averages and separate R/C++ results expose
+sensitivity to file organization and language mix. The below-20 share is a review
+aid, not a calibrated quality threshold. Duplication, test coverage and coupling
+are not ingredients of this formula; they remain separate evidence. File splits,
+removed functionality and vendored code can improve MI without reducing the
+maintenance effort of the complete system. Use same-path comparisons and inspect
+hotspots before declaring a branch more maintainable. See also
+[Halstead definitions and MI limitations](https://radon.readthedocs.io/en/master/intro.html).
+
+To inspect a local checkout without rebuilding FIMS:
+
+```bash
+.venv-maintainability/bin/python scripts/maintainability.py \
+  --source /path/to/FIMS --ref my-branch --output /tmp/maintainability.json
+.venv-maintainability/bin/python scripts/maintainability.py \
+  --report /tmp/maintainability.json --output /tmp/maintainability_report.md
+```
+
 ## Benchmark Stages
 
 `R/run_benchmark.R` is structured into five stages:

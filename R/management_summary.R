@@ -100,5 +100,17 @@ if (file.exists(leak_report)) {
     leak_lines[grepl("^\\|", leak_lines)], "",
     "Details: [Leak detection report](leak_report.md)")
 }
+maintainability_report <- file.path(dirname(output), "maintainability_report.md")
+if (file.exists(maintainability_report)) {
+  source_lines <- readLines(maintainability_report, warn = FALSE)
+  start <- match("## Summary", source_lines)
+  end <- match("## Method and limitations", source_lines)
+  if (!is.na(start) && !is.na(end)) {
+    lines <- c(lines, "", "## Maintainability", "",
+      source_lines[seq.int(start + 1L, end - 1L)], "",
+      "Source metrics are review indicators, not a maintainability verdict. Coverage and semantic coupling are not measured.",
+      "Details: [Maintainability report](maintainability_report.md)")
+  }
+}
 writeLines(lines, output)
 cat("Management summary written to", output, "\n")
