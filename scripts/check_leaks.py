@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run a separate joint-validation leak check and summarize native tool output."""
+"""Run the benchmark stage under a leak detector and summarize native tool output."""
 import argparse
 import json
 import os
@@ -8,6 +8,8 @@ import platform
 import re
 import shutil
 import subprocess
+
+from tidy import write_rows
 
 
 def parse_summary(text, host):
@@ -116,16 +118,12 @@ def run(ref, output):
             r_home = subprocess.check_output(['Rscript', '-e', 'cat(R.home())'], text=True).strip()
             env = dict(os.environ, R_HOME=r_home, FIMS_LEAK_COMPLETED=str(marker.resolve()))
             # Launch R itself so the detector inspects R, not a shell launcher.
-            # The joint fit is the workload: a leak that only shows up under
-            # optimization is the one worth finding. FIMS_SIZE picks the fixture,
-            # so a leak check can be run against the small model while iterating.
-            workload = (
-                "source('R/setup_FIMS.R'); "
-                "inputs <- setup_fims_inputs(size = Sys.getenv('FIMS_SIZE', 'normal')); "
-                "invisible(run_fims_validation(inputs)); "
-                "gc(); writeLines('completed', Sys.getenv('FIMS_LEAK_COMPLETED')); "
-                "quit(save='no', status=0)"
-            )
+            # The workload is the same stage script the profilers run, so a leak
+            # check measures the stage the benchmark asked for: FIMS_STAGE,
+            # FIMS_BACKEND, TEARDOWN and FIMS_SIZE come from the environment. The
+            # script writes FIMS_LEAK_COMPLETED just before it exits, after gc(),
+            # which is how a finished run is told apart from a crash.
+            workload = "source(file.path(Sys.getenv('REPO_ROOT'), 'R', 'single_model_run.R'))"
             command = [str(Path(r_home) / 'bin/exec/R'), '--vanilla', '--slave', '-e', workload]
             if host == 'Darwin':
                 env['MallocStackLogging'] = '1'
@@ -150,9 +148,22 @@ def run(ref, output):
     print(f"Leak check {ref}: {result['status']}")
 
 
+def tidy(paths, tidy_out):
+    """Leak numbers as tidy rows, so results.tsv carries them like everything else."""
+    rows = []
+    for path in paths:
+        data = json.loads(path.read_text())
+        rows.append({"ref": data["ref"], "source": "leaks", "metric": "status",
+                     "unit": "text", "value": data["status"], "path": path.name})
+        for metric, value in (data["metrics"] or {}).items():
+            rows.append({"ref": data["ref"], "source": "leaks", "metric": metric,
+                         "unit": "bytes", "value": value, "path": path.name})
+    write_rows(tidy_out, rows)
+
+
 def report(paths, output):
     lines = ['# FIMS Leak Detection Report', '',
-             'Each branch runs the joint-validation workload in a separate process under a leak detector, followed by R garbage collection and exit. Installation and this instrumented run are excluded from total validation runtime.', '',
+             'Each branch runs the benchmark stage in a separate process under a leak detector, followed by R garbage collection and exit.', '',
              'Results cover the entire R process, including FIMS, backend libraries, and dependencies. Inspect allocation stacks before attributing a leak to a backend. No leaks detected is limited to this workload and detector; reachable retained memory and growth across repeated model lifecycles require separate investigation.', '',
              '| Git ref | Detector | Status | Reported bytes by category | Raw log |', '|---|---|---|---|---|']
     for path in paths:
@@ -175,9 +186,13 @@ if __name__ == '__main__':
     parser.add_argument('--ref')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--report', nargs='+', type=Path)
+    parser.add_argument('--tidy-out', type=Path,
+                        help='Also write the leak numbers as tidy rows.')
     args = parser.parse_args()
     if args.report:
         report(args.report, args.output)
+        if args.tidy_out:
+            tidy(args.report, args.tidy_out)
     elif args.ref:
         run(args.ref, args.output)
     else:

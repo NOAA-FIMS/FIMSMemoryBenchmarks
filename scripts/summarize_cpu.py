@@ -54,11 +54,33 @@ def mac_symbols(path: Path) -> list[tuple[str, float]]:
     return sorted(totals.items(), key=lambda item: item[1], reverse=True)
 
 
+def perf_libraries(path: Path) -> list[tuple[str, float]]:
+    """Sampled share per shared object, which says how much time was spent in
+    FIMS's own code rather than in R's evaluator.
+
+    perf reports the shared object in its own column, which perf_symbols()
+    discards; summing it per library is the coarse view worth reporting.
+    """
+    if not path.exists():
+        return []
+    totals: dict[str, float] = {}
+    pattern = re.compile(r"^\s*([0-9.]+)%\s+(\S+)\s")
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        match = pattern.match(line)
+        if match:
+            totals[match.group(2)] = totals.get(match.group(2), 0.0) + float(match.group(1))
+    return sorted(totals.items(), key=lambda item: item[1], reverse=True)
+
+
 def perf_symbols(path: Path) -> list[tuple[str, float]]:
     if not path.exists():
         return []
     result = []
-    pattern = re.compile(r"^\s*([0-9.]+)%\s+\S+\s+\S+\s+(?:\[[^.]+\.\]\s+)?(.+?)\s*$")
+    # The trailing "-  -" are perf's empty srcline columns, not part of the
+    # symbol; without stripping them the same symbol reads differently in
+    # different reports and never matches across runs.
+    pattern = re.compile(
+        r"^\s*([0-9.]+)%\s+\S+\s+\S+\s+(?:\[[^.]+\.\]\s+)?(.+?)(?:\s+-)*\s*$")
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
         match = pattern.match(line)
         if match:
@@ -113,7 +135,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--platform", required=True)
     parser.add_argument("--run", nargs=4, action="append", required=True, metavar=("REF", "VERSION", "STATUS", "PATH"))
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=Path,
+                        help="Render Markdown here. Omit for tidy rows only, "
+                             "which is what the benchmark asks for.")
     parser.add_argument("--tidy-out", type=Path,
                         help="also write what was parsed as tidy rows")
     args = parser.parse_args()
@@ -128,10 +152,18 @@ def main() -> int:
             rows.append({"ref": run.ref, "fims_version": run.version, "source": "cpu",
                          "metric": f"symbol:{symbol}", "unit": "percent",
                          "value": value, "path": run.path.name})
+        # Linux only: Instruments does not report a shared object per row.
+        if args.platform != "Darwin":
+            for library, value in perf_libraries(run.path):
+                rows.append({"ref": run.ref, "fims_version": run.version, "source": "cpu",
+                             "metric": f"library:{library}", "unit": "percent",
+                             "value": round(value, 2), "path": run.path.name})
     write_rows(args.tidy_out, rows)
 
-    args.output.write_text(render(runs, args.platform), encoding="utf-8")
-    print(f"CPU Markdown report written to {args.output}")
+    if args.output is not None:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(render(runs, args.platform), encoding="utf-8")
+        print(f"CPU Markdown report written to {args.output}")
     return 0
 
 

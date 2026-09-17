@@ -61,6 +61,7 @@ def parse_profile(path: Path) -> Profile:
         match = re.search(rf"^\s*([0-9]+)\s+{re.escape(label)}\s*$", text, re.MULTILINE)
         if match:
             setattr(profile, attribute, int(match.group(1)))
+
     return profile
 
 
@@ -417,7 +418,9 @@ def main() -> int:
         metavar=("REF", "VERSION", "PROFILE", "TRACE_STATUS", "TRACE_PATH"),
         required=True,
     )
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=Path,
+                        help="Render Markdown here. Omit for tidy rows only, "
+                             "which is what the benchmark asks for.")
     parser.add_argument("--tidy-out", type=Path,
                         help="also write what was parsed as tidy rows")
     args = parser.parse_args()
@@ -469,9 +472,10 @@ def main() -> int:
                          "value": values.get("bytes", 0), "path": run.trace_path.name})
     write_rows(args.tidy_out, rows)
 
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(render(runs, args.output), encoding="utf-8")
-    print(f"Markdown report written to {args.output}")
+    if args.output is not None:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(render(runs, args.output), encoding="utf-8")
+        print(f"Markdown report written to {args.output}")
     return 0
 
 

@@ -1,31 +1,34 @@
-# ---------------------------------------------------------------------------
-# Fixture: everything identical across branches. Built once, never timed.
-# ---------------------------------------------------------------------------
+check_for_quadra <- function() {
+  if (!exists("quadra_fit")) {
+    stop("The current branch is not built to work with quadra. ",
+    "Please provide a branch where quandra is built into the backend.")
+  }
+}
 
 # ---------------------------------------------------------------------------
 # Model size and backend support, ported verbatim from
 # feature/macos-instruments-profiling so the upstream reporting keeps working.
 # ---------------------------------------------------------------------------
 
-expand_fims_years <- function(data, n_years) {
-  base_years <- max(data$timing[data$type == "catch"], na.rm = TRUE)
-  static <- data[is.na(data$timing), , drop = FALSE]
-  dynamic_types <- unique(data$type[!is.na(data$timing)])
-  expanded <- lapply(dynamic_types, function(type) {
-    source <- data[data$type == type & !is.na(data$timing), , drop = FALSE]
-    source_years <- if (identical(type, "weight_at_age")) {
-      base_years + 1L
+expand_fims_years <- function(dat, n_years) {
+  base_years <- get_n_years(dat)
+  static <- dat |> get_data() |>
+    dplyr::filter(type == "age_to_length_conversion")
+  dynamic_types <- dat |> get_data() |>
+    dplyr::filter(type != "age_to_length_conversion") |>
+    dplyr::pull(type) |> unique()
+  expanded <- lapply(dynamic_types, function(typename) {
+    source_dat <- dat |> get_data() |> dplyr::filter(type == typename)
+    if (typename == "weight_at_age") {
+      source_years <- base_years + 1L
+      target_years <- n_years + 1L
     } else {
-      base_years
-    }
-    target_years <- if (identical(type, "weight_at_age")) {
-      n_years + 1L
-    } else {
-      n_years
+      source_years <- base_years
+      target_years <- n_years
     }
     do.call(rbind, lapply(seq_len(target_years), function(year) {
       source_year <- (year - 1L) %% source_years + 1L
-      rows <- source[source$timing == source_year, , drop = FALSE]
+      rows <- source_dat |> dplyr::filter(timing == source_year)
       rows$timing <- year
       rows
     }))
@@ -35,40 +38,27 @@ expand_fims_years <- function(data, n_years) {
   result
 }
 
+expand_fims_modules <- function(parameters, n_fleets, n_surveys) {
 
-
-# Resolve complete modern APIs from FIMS itself, preferring the XPtr API.
-resolve_quadra_api <- function(namespace) {
-  for (backend in c("xptr", "native")) {
-    prefix <- if (backend == "xptr") "quadra_" else "native_quadra_"
-    functions <- lapply(paste0(prefix, c("evaluate", "fit", "sdreport")), function(name) {
-      get0(name, envir = namespace, mode = "function", inherits = FALSE)
-    })
-    if (all(vapply(functions, is.function, logical(1)))) {
-      names(functions) <- c("evaluate", "fit", "sdreport")
-      return(c(list(backend = backend), functions))
-    }
-  }
-  NULL
 }
 
-
-
-setup_fims_inputs <- function(size = c("normal", "large"), n_years = NULL) {
+setup_fims_inputs <- function(size = c("normal", "large")) {
   size <- match.arg(size)
-  if (is.null(n_years)) {
-    n_years <- if (identical(size, "large")) 120L else 30L
+
+  if (size == "normal") {
+    n_years <- 30
+  } else {
+    n_years <- 120
   }
-  n_years <- as.integer(n_years)
 
-  data_big <- NULL
-  utils::data("data_big", package = "FIMS", envir = environment())
+  data("data_big")
+  data_big <- FIMS::FIMSFrame(data_big)
 
-  # "normal" is data_big as shipped (30 years). Longer models are built by
-  # recycling its years, so the model grows in dimension while every value stays
-  # one of the tuned ones.
+  # "normal" is the current number of years of data_big (30 years). Longer models are built by
+  # recycling its years, so the model grows in dimension while values repeat across added years
+
   benchmark_data <- if (n_years > 30L) expand_fims_years(data_big, n_years) else data_big
-  message(sprintf("--> Fixture: %s (%d years)", size, n_years))
+  message(sprintf("--> Inputs: %s (%d years)", size, n_years))
   data_4_model <- FIMS::FIMSFrame(benchmark_data)
 
   parameters_4_model <- FIMS::setup_default_parameters(data = data_4_model) |>
@@ -154,123 +144,191 @@ setup_fims_inputs <- function(size = c("normal", "large"), n_years = NULL) {
 #'   evaluation cost above timer resolution.
 #' @param theta    Fixed parameter vector. Pass the same one to both branches
 #'   so evaluation cost is compared at an identical point.
-setup_fims_model <- function(fixture,
-                            stage = c("initialize", "assemble", "tape",
-                                      "evaluate", "optimize", "sdreport"),
-                            teardown = c("none", "clear", "release"),
-                            n_eval = 1L,
-                            theta = NULL,
-                            random = "re") {
+#' Run the model up one stage of the workflow
+#'
+#' The stages are cumulative: "sdreport" runs everything below it. Each stage is
+#' timed separately, so one run yields the cost of every stage beneath it.
+#'
+#' `backend` chooses the model used to build the tape (TMB vs. Quadra).
+#' TMB builds an AD tape with MakeADFun and optimizes over it; Quadra
+#' builds its own model from the FIMS modules and runs its own tape, so
+#' the quadra path skips the 'tape' stage entirely. After the 'tape'
+#' stage, the Quadra and TMB runs are identical.
+#'
+#' From "optimize" the run also records what is needed to check that two builds
+#' agree -- objective, gradient, parameters, convergence -- and at "sdreport"
+#' the standard errors.
+#'
+#' @param input Output of setup_fims_inputs().
+#' @param stage The stopping point of the model run.
+#' @param teardown "none" leaves the objects alive, "clear" calls FIMS::clear(),
+#'   "release" drops handles and runs the garbage collector.
+#' @param n_eval fn/gr evaluations at the "evaluate" rung.
+#' @param backend "TMB" or "quadra". 
+#' @param record False by default. Results are only recorded in the reference run
+#' outside the R and C++ profiler runs.
+#' @return A list of phase timings, results, and arguments used for the run.
+setup_fims_model <- function(input,
+                             stage = c("initialize", "tape", "evaluate",
+                                        "optimize", "sdreport", "helper"),
+                             teardown = c("none", "clear", "release"),
+                             n_eval = 1L,
+                             backend = c("TMB", "quadra"),
+                             record = FALSE) {
   stage <- match.arg(stage)
   teardown <- match.arg(teardown)
-  ladder <- c("initialize", "assemble", "tape", "evaluate", "optimize", "sdreport")
-  target <- match(stage, ladder)
+  backend <- match.arg(backend)
 
   marks <- c(enter = bench::hires_time())
   mark <- function(nm) marks[[nm]] <<- bench::hires_time()
+  result <- list(backend = backend)
 
-  FIMS::clear()
-  mark("clear_entry")
-
-  # --- initialize: construction + the first assembly pass ------------------
-  init_parms <- FIMS::initialize_fims(fixture$parameters, data = fixture$data)
-  mark("initialize")
-
-  # --- assemble: a second CreateTMBModel() re-runs assembly over the SAME
-  # interface objects, so (initialize - assemble) isolates construction cost
-  # without needing a `build = FALSE` argument upstream. Verify the guard
-  # below holds on both branches before trusting the decomposition.
-  if (target >= 2L) {
-    n_before <- length(FIMS::get_fixed())
-    FIMS::CreateTMBModel()
-    stopifnot(length(FIMS::get_fixed()) == n_before)
-    mark("assemble")
-  }
-
-  obj <- NULL
-  signature <- list()
-
-  if (target >= 3L) {
-    obj <- TMB::MakeADFun(
-      data = list(),
-      parameters = init_parms$parameters,
-      random = random,
-      DLL = "FIMS",
-      silent = TRUE
-    )
-    mark("tape")
-    signature$par_names <- names(obj$par)
-    signature$n_par <- length(obj$par)
-  }
-
-  if (target >= 4L) {
-    if (is.null(theta)) theta <- obj$par
-    for (i in seq_len(n_eval)) {
-      nll <- obj$fn(theta)
-      gr <- obj$gr(theta)
+  if (stage == "helper") {
+    if (backend == "quadra") {
+      check_for_quadra()
     }
-    mark("evaluate")
-    signature$nll <- nll
-    signature$gradient <- as.numeric(gr)
-  }
-
-  if (target >= 5L) {
-    opt <- nlminb(
-      start = if (is.null(theta)) obj$par else theta,
-      objective = obj$fn, gradient = obj$gr,
-      control = list(eval.max = 10000, iter.max = 10000, trace = 0)
+    FIMS::clear()
+    mark("clear_entry")
+    init_parms <- FIMS::initialize_fims(
+      result$parameters, data = result$data
     )
-    mark("optimize")
-    signature$objective <- opt$objective
-    signature$iterations <- opt$iterations
-    signature$convergence <- opt$convergence
-  }
+    fit <- FIMS::fit_fims(init_parms, optimize = TRUE,
+                          backend = backend)
+    result = fit
 
-  if (target >= 6L) {
-    sdr <- TMB::sdreport(obj)
-    mark("sdreport")
-    signature$sd_par_fixed <- as.numeric(sqrt(diag(sdr$cov.fixed)))
-  }
+  } else {
+    ladder <- c("initialize", "tape", "evaluate",
+                "optimize", "sdreport")
+    target <- match(stage, ladder)
 
-  switch(teardown,
-    clear   = { FIMS::clear(); mark("teardown") },
-    release = { obj <- NULL; init_parms <- NULL; gc(); mark("teardown") },
-    none    = invisible(NULL)
-  )
+    FIMS::clear()
+    mark("clear_entry")
+
+    # --- initialize: construction, and CreateTMBModel() inside initialize_fims(),
+    # which populates the derived quantities -------------------------------------
+    init_parms <- FIMS::initialize_fims(input$parameters, data = input$data)
+    mark("initialize")
+    if (record) {
+      result$initial_parameters <- init_parms$parameters
+      result$n_fixed <- init_parms$parameters$p |> length()
+      result$n_random <- init_parms$parameters$re |> length()
+      result$n_par <- init_parms$parameters |> unlist() |> length()
+    }
+
+    obj <- NULL
+
+    # --- tape: 
+    if (target >= 2L) {
+      obj <- TMB::MakeADFun(
+        data = list(), parameters = init_parms$parameters,
+        random = "re", DLL = "FIMS", silent = TRUE
+      )
+      mark("tape")
+      if (record) {
+        result$n_par <- length(obj$env$last.par.best)
+        result$initial_parameters <- obj$env$last.par.best
+      }
+    }
+
+    # --- evaluate
+    if (target >= 3L) {
+      initial_nll <- initial_gr <- 0
+      for (i in seq_len(n_eval)) {
+        nll <- obj$fn(obj$par)
+        gradient <- obj$gr(obj$par)
+        if (i == 1) {
+          initial_nll <- as.numeric(nll)
+          initial_gr <- as.numeric(gradient)
+        }
+      }
+      mark("evaluate")
+      if (record) {
+        result$initial_objective <- initial_nll
+        result$initial_gradient <- initial_gr
+        result$final_objective <- as.numeric(nll)
+        result$final_gradient <- as.numeric(gradient)
+        result$final_parameters <- as.numeric(obj$env$last.par.best)
+        result$function_evaluations <- n_eval
+        result$gradient_evaluations <- n_eval
+      }
+    }
+
+    if (target >= 4L) {
+      opt <- nlminb( obj$par, obj$fn, obj$gr,
+        control = list(eval.max = 10000, iter.max = 10000, trace = 0)
+      )
+      mark("optimize")
+      if (record) { 
+        result$final_parameters <- as.numeric(obj$env$last.par.best)
+        result$final_objective <- as.numeric(opt$objective)
+        result$final_gradient <- as.numeric(gr(opt$par))
+        result$convergence <- opt$convergence
+        result$message <- opt$message
+        result$iterations <- opt$iterations
+        result$function_evaluations <- unname(opt$evaluations[["function"]])
+        result$gradient_evaluations <- unname(opt$evaluations[["gradient"]])
+      }
+    }
+
+    if (target >= 5L) {
+      sdr <- TMB::sdreport(obj)
+      mark("sdreport")
+      if (record) {
+        result$sdr_fixed <- summary(sdr, "fixed")
+        result$random <- summary(sdr, "random")
+        result$report <- summary(sdr, "report")
+      }
+    }
+
+
+    switch(teardown,
+      clear   = { FIMS::clear(); mark("teardown") },
+      release = { obj <- NULL; init_parms <- NULL; gc(); mark("teardown") },
+      none    = invisible(NULL)
+    )
+  }
 
   structure(
-    list(signature = signature,
+    list(result = result,
          phases = diff(marks),
          stage = stage,
+         backend = backend,
          teardown = teardown),
     class = "fims_stage_result"
   )
 }
 
 
-# ---------------------------------------------------------------------------
-# End-to-end path, kept separate because it does not share the same workflow
-# ---------------------------------------------------------------------------
-
-run_fims_helper <- function(fixture) {
-  FIMS::clear()
-  init_parms <- FIMS::initialize_fims(fixture$parameters, data = fixture$data)
-  fit <- FIMS::fit_fims(init_parms, optimize = TRUE)
-  on.exit(FIMS::clear(), add = TRUE)
-  invisible(fit)
-}
-
 
 # ---------------------------------------------------------------------------
 # Equivalence check for bench::mark(check = fims_check)
 # ---------------------------------------------------------------------------
 
+#' Do two runs of the same stage agree?
+#'
+#' Passed to bench::mark(check = fims_check), which compares one iteration with
+#' the next. Only the fields the rung actually produced are compared: a field
+#' missing from both is agreement, and missing from one is not. The comparison
+#' is numeric, so it works whether a field is a list (initialize_fims()
+#' parameters), a named vector (parList()), or a matrix (an sdreport summary).
 fims_check <- function(a, b) {
-  fa <- a$signature
-  fb <- b$signature
-  identical(fa$par_names, fb$par_names) &&
-    isTRUE(all.equal(fa$nll, fb$nll, tolerance = 1e-8)) &&
-    isTRUE(all.equal(fa$gradient, fb$gradient, tolerance = 1e-6))
+  fa <- a$result
+  fb <- b$result
+  same <- function(name, tolerance) {
+    x <- fa[[name]]
+    y <- fb[[name]]
+    if (is.null(x) && is.null(y)) return(TRUE)
+    if (is.null(x) || is.null(y)) return(FALSE)
+    isTRUE(all.equal(unname(unlist(x)), unname(unlist(y)), tolerance = tolerance))
+  }
+  identical(fa$backend, fb$backend) &&
+    same("n_par", 0) && same("n_fixed", 0) && same("n_random", 0) &&
+    same("initial_parameters", 1e-10) &&
+    same("initial_objective", 1e-8) &&
+    same("final_objective", 1e-8) &&
+    same("final_parameters", 1e-6) &&
+    same("final_gradient", 1e-6) &&
+    same("sdr_fixed", 1e-6)
 }
 
 # ---------------------------------------------------------------------------
@@ -281,14 +339,14 @@ fims_check <- function(a, b) {
 #'
 #' The compiler flags come from the environment, not from this function:
 #' run_fims_benchmark() writes a Makevars per build type and points
-#' R_MAKEVARS_USER at it, so the same call produces the -O0 build for Valgrind
+#' R_MAKEVARS_USER at it, so the same call produces the -O1 build for Valgrind
 #' and the -O2 build for perf. R_LIBS_USER decides which library it lands in, so
 #' both builds of both refs can coexist.
 #'
 #' `--preclean` runs `make clean` in the package source before building. It is a
 #' no-op when remotes downloads a fresh copy, but it is what stops a local
 #' checkout from linking object files left over from a build with different
-#' flags -- which would silently mix -O0 and -O2 objects in one library.
+#' flags -- which would silently mix -O1 and -O2 objects in one library.
 #'
 #' @param ref Branch name, tag, or commit hash (e.g. "main", "xptr-refactor").
 install_fims <- function(ref = "main") {
@@ -332,218 +390,4 @@ install_fims <- function(ref = "main") {
 }
 
 
-# ---------------------------------------------------------------------------
-# Joint objective validation
-# ---------------------------------------------------------------------------
-
-#' Fit the joint objective and return everything needed to compare two builds
-#'
-#' Ported from setup_fims_model(mode = "validation") on
-#' feature/macos-instruments-profiling. The returned list is a contract:
-#' R/summarize_validation.R, R/final_report.R and R/management_summary.R all
-#' read these names, so add fields rather than renaming them.
-#'
-#' Dispatches over whichever backend the installed FIMS provides -- the XPtr or
-#' native Quadra callbacks when present, TMB otherwise -- so the same comparison
-#' works across the branches being benchmarked.
-#'
-#' @param fixture Output of setup_fims_inputs().
-#' @return A list of parameters, objectives, gradients and convergence details.
-run_fims_validation <- function(fixture) {
-  n_years <- FIMS::get_n_years(fixture$data)
-  model_size <- if (!is.null(fixture$size)) fixture$size else if (n_years > 30L) "large" else "normal"
-
-  FIMS::clear()
-  init_parms <- FIMS::initialize_fims(fixture$parameters, data = fixture$data)
-
-    fims_namespace <- asNamespace("FIMS")
-    quadra_api <- resolve_quadra_api(fims_namespace)
-    has_modern_quadra <- !is.null(quadra_api)
-
-    legacy_quadra_functions <- c(
-      "CreateQuadraModel", "EvaluateQuadraModel", "fit_fims_quadra_joint",
-      "get_fixed", "get_random"
-    )
-    has_legacy_quadra_api <- all(vapply(
-      legacy_quadra_functions,
-      exists,
-      logical(1),
-      mode = "function",
-      inherits = TRUE
-    ))
-    has_legacy_quadra <- !has_modern_quadra && has_legacy_quadra_api && tryCatch(
-      {
-        CreateQuadraModel()
-        TRUE
-      },
-      error = function(error) {
-        if (grepl(
-          "Quadra support was not enabled",
-          conditionMessage(error),
-          fixed = TRUE
-        )) {
-          return(FALSE)
-        }
-        stop(error)
-      }
-    )
-    quadra_backend <- if (has_modern_quadra) {
-      quadra_api$backend
-    } else if (has_legacy_quadra) {
-      "legacy"
-    } else {
-      "none"
-    }
-
-      fixed <- get_fixed()
-      random <- get_random()
-      start <- c(fixed, random)
-      fixed_name_function <- get0(
-        "native_get_parameter_names",
-        envir = fims_namespace,
-        mode = "function", inherits = FALSE
-      )
-      fixed_names <- if (is.function(fixed_name_function)) {
-        fixed_name_function()
-      } else {
-        named_fixed <- get0(
-          "get_parameter_names",
-          envir = fims_namespace,
-          mode = "function", inherits = FALSE
-        )(fixed)
-        names(named_fixed)
-      }
-      random_name_function <- get0(
-        "get_random_names",
-        envir = fims_namespace,
-        mode = "function", inherits = FALSE
-      )
-      random_names <- names(random_name_function(random))
-      if (length(fixed_names) != length(fixed)) {
-        fixed_names <- paste0("fixed_effect_", seq_along(fixed))
-      }
-      if (length(random_names) != length(random)) {
-        random_names <- paste0("random_effect_", seq_along(random))
-      }
-      if (length(random) == n_years - 1L &&
-        all(grepl("^random_effect_", random_names))) {
-        random_names <- paste0(
-          "Recruitment.1.log_devs.", seq.int(2L, n_years)
-        )
-      }
-      if (quadra_backend %in% c("xptr", "native")) {
-        evaluate <- function(parameters) {
-          quadra_api$evaluate(
-            fixed = parameters[seq_along(fixed)],
-            random = parameters[length(fixed) + seq_along(random)]
-          )
-        }
-      } else if (quadra_backend == "legacy") {
-        evaluate <- function(parameters) {
-          EvaluateQuadraModel(
-            fixed_values = parameters[seq_along(fixed)],
-            random_values = parameters[length(fixed) + seq_along(random)]
-          )
-        }
-      } else {
-        joint <- TMB::MakeADFun(
-          data = list(),
-          parameters = init_parms$parameters,
-          DLL = "FIMS",
-          silent = TRUE
-        )
-        evaluate <- function(parameters) {
-          list(
-            objective = joint$fn(parameters),
-            gradient = joint$gr(parameters)
-          )
-        }
-      }
-      initial <- evaluate(start)
-      split_prefix <- if (quadra_backend == "native") "native_quadra_" else "quadra_"
-      split_objective <- get0(paste0(split_prefix, "objective"), fims_namespace, mode = "function", inherits = FALSE)
-      split_gradient <- get0(paste0(split_prefix, "gradient"), fims_namespace, mode = "function", inherits = FALSE)
-      if (quadra_backend %in% c("xptr", "native") && is.function(split_objective) && is.function(split_gradient)) {
-        objective <- function(parameters) split_objective(
-          fixed = parameters[seq_along(fixed)],
-          random = parameters[length(fixed) + seq_along(random)]
-        )
-        gradient <- function(parameters) split_gradient(
-          fixed = parameters[seq_along(fixed)],
-          random = parameters[length(fixed) + seq_along(random)]
-        )
-      } else if (quadra_backend == "none") {
-        objective <- joint$fn
-        gradient <- joint$gr
-      } else {
-        objective <- function(parameters) evaluate(parameters)$objective
-        gradient <- function(parameters) evaluate(parameters)$gradient
-      }
-      started <- proc.time()[["elapsed"]]
-      fit <- nlminb(
-        start = start,
-        objective = objective,
-        gradient = gradient,
-        control = list(eval.max = 2000, iter.max = 1000, trace = 0)
-      )
-      elapsed <- proc.time()[["elapsed"]] - started
-      final <- evaluate(fit$par)
-      raw_names <- c(fixed_names, random_names)
-      canonical_base <- sub("\\.[0-9]+$", "", raw_names)
-      canonical_base <- sub("\\.log_slope$", ".slope", canonical_base)
-      canonical_base <- sub(
-        "^dnorm\\.[0-9]+\\.log_sd$", "Recruitment.1.log_sd",
-        canonical_base
-      )
-      occurrence <- ave(
-        seq_along(canonical_base), canonical_base,
-        FUN = function(index) seq_along(index) - 1L
-      )
-      repeated <- table(canonical_base)[canonical_base] > 1L
-      canonical_names <- canonical_base
-      canonical_names[repeated] <- paste0(
-        canonical_base[repeated], ".", occurrence[repeated]
-      )
-      log_slope <- grepl("\\.log_slope\\.[0-9]+$", raw_names)
-      canonical_initial <- start
-      canonical_final <- as.numeric(fit$par)
-      canonical_initial[log_slope] <- exp(canonical_initial[log_slope])
-      canonical_final[log_slope] <- exp(canonical_final[log_slope])
-      canonical_initial_gradient <- as.numeric(initial$gradient)
-      canonical_final_gradient <- as.numeric(final$gradient)
-      canonical_initial_gradient[log_slope] <-
-        canonical_initial_gradient[log_slope] / canonical_initial[log_slope]
-      canonical_final_gradient[log_slope] <-
-        canonical_final_gradient[log_slope] / canonical_final[log_slope]
-      return(list(
-        backend = if (quadra_backend == "none") "TMB" else quadra_backend,
-        build_profile = Sys.getenv(
-          "FIMS_BENCHMARK_BUILD_PROFILE", "unrecorded"
-        ),
-        model_size = model_size,
-        n_fixed = length(fixed),
-        n_random = length(random),
-        parameter_names = c(fixed_names, random_names),
-        parameter_types = c(
-          rep("fixed", length(fixed)), rep("random", length(random))
-        ),
-        canonical_parameter_names = canonical_names,
-        canonical_initial_parameters = canonical_initial,
-        canonical_initial_gradient = canonical_initial_gradient,
-        canonical_final_parameters = canonical_final,
-        canonical_final_gradient = canonical_final_gradient,
-        initial_parameters = start,
-        initial_objective = as.numeric(initial$objective),
-        initial_gradient = as.numeric(initial$gradient),
-        final_parameters = as.numeric(fit$par),
-        final_objective = as.numeric(final$objective),
-        final_gradient = as.numeric(final$gradient),
-        convergence = fit$convergence,
-        message = fit$message,
-        iterations = fit$iterations,
-        function_evaluations = unname(fit$evaluations[["function"]]),
-        gradient_evaluations = unname(fit$evaluations[["gradient"]]),
-        elapsed_seconds = unname(elapsed)
-      ))
-}
 

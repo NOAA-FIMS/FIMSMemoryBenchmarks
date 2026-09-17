@@ -3,9 +3,11 @@ import subprocess
 import tempfile
 import unittest
 
-from console_summary import render as console
 from summarize_macos import Run, parse_profile, render as macos
 from summarize_massif import Run as MassifRun, Profile, render as massif
+
+# The R sources are found relative to this file, so the tests run from anywhere.
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 class MultiRefTests(unittest.TestCase):
@@ -19,7 +21,7 @@ class MultiRefTests(unittest.TestCase):
         def resolve(*refs):
             first, rest = refs[0], list(refs[1:])
             expression = (
-                'source("R/run_benchmark.R");'
+                f'source("{REPO_ROOT}/R/run_benchmark.R");'
                 'refs <- suppressWarnings(resolve_refs({first}, {rest}));'
                 'cat(refs, sep = "\n")'
             ).format(first=self._r_vector([first]), rest=self._r_vector(rest))
@@ -49,7 +51,12 @@ class MultiRefTests(unittest.TestCase):
         quoted = ', '.join('"{}"'.format(value) for value in values)
         return 'c({})'.format(quoted)
 
-    def test_all_refs_compared_to_first(self):
+    def test_every_ref_is_compared_with_the_first(self):
+        """The --output reports, which are for debugging one profiler by hand.
+
+        The benchmark itself asks the summarizers only for tidy rows, covered by
+        test_parsers.py; this keeps the hand-run path honest about N refs.
+        """
         with tempfile.TemporaryDirectory() as directory:
             p = Path(directory)
             profile = p / 'rss'
@@ -59,8 +66,6 @@ class MultiRefTests(unittest.TestCase):
             self.assertIn('third vs baseline', macos(runs, p/'mac.md'))
             mruns = [MassifRun(ref, '1', profile, [Profile(profile, peak_heap=1024)]) for ref in refs]
             self.assertIn('third vs baseline', massif(mruns, p/'massif.md'))
-            rows = [(ref, str(profile), str(p/'missing'), str(profile), str(p/'missing')) for ref in refs]
-            self.assertIn('Change: third relative to baseline', console(rows, 'Darwin'))
             runs[0].profile.maximum_rss = None
             self.assertNotIn('## Detailed branch comparison:', macos(runs, p/'mac.md'))
 

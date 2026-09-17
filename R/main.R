@@ -13,8 +13,23 @@
 
 # ---- settings ---------------------------------------------------------------
 
-ref_first <- "8bdd020"
-ref_compare <- "update-R-with-XPtr-interface"
+# Branches the rows with backend "TMB" compare. Every ref is measured against
+# the baseline, and ref_compare takes any number of them, so adding a third
+# branch is one more entry rather than another pass.
+ref_first <- "8bdd020"                          # baseline
+ref_compare <- c("update-R-with-XPtr-interface")
+
+# Quadra is a special case and comparisons require a FIMS branch with quadra
+# implemented. Setting the two refs bellow to `NULL` will skip the four "quadra-" 
+# rows. Both branches must implement Quadra as the backend, a build that does not
+# have it will fail the run.
+ref_first_quadra <- NULL                        # baseline; NULL skips the rows
+ref_compare_quadra <- NULL
+
+# Cycles in each back-to-back loop: the stage built and cleared this many times
+# for memory growth, and again for bench::mark() timing. Each cycle is a full
+# model build, so at optimize and sdreport this is the slowest part of a row.
+bench_iterations <- 20
 
 # Rows with heavy = TRUE are the expensive ones: sdreport at the large model
 # under Valgrind is the combination that has run this machine out of memory.
@@ -22,7 +37,7 @@ ref_compare <- "update-R-with-XPtr-interface"
 run_heavy <- TRUE
 
 # Set to a vector of row names to run only some of them, or NULL for all.
-only <- NULL
+only <- c("initialize-normal", "initialize-large-clear")
 
 repo_root <- normalizePath(
   if (requireNamespace("here", quietly = TRUE)) here::here() else getwd(),
@@ -36,46 +51,116 @@ source(file.path(repo_root, "R", "run_benchmark.R"))
 # "sdreport" includes optimize. The cost of sdreport alone is the difference
 # between those two rows -- which is why both are here rather than sdreport
 # only.
+# 
+# size differentiates between the base default model (n = 30) in FIMS and 
+# an artifically enlarged population created by repeating the default dataset 
+# four times (n = 120)  
 #
 # teardown rows answer a different question: whether what initialize retained
 # is actually released, by clear() or by dropping handles and letting the GC
 # run. Those only make sense where there is something retained to release.
 
-runs <- data.frame(
-  # Validation runs first for each size: its result is cached and reused by the
-  # rows that follow, which is what lets them compose final_report.md without
-  # re-fitting the model.
-  label      = c("validation-normal",
-                 "initialize-normal",
-                 "optimize-normal",
-                 "sdreport-normal",
-                 "validation-large",
-                 "initialize-large",
-                 "initialize-large-clear",
-                 "initialize-large-release",
-                 "optimize-large",
-                 "sdreport-large"),
-  # The two validation rows use stage "validation": that profile always runs the
-  # validation fit, so any other value here would be ignored but still reported.
-  stage      = c("validation", "initialize", "optimize", "sdreport",
-                 "validation", "initialize", "initialize", "initialize",
-                 "optimize", "sdreport"),
-  size       = c("normal", "normal", "normal", "normal",
-                 "large", "large", "large", "large",
-                 "large", "large"),
-  teardown   = c("none", "none", "none", "none",
-                 "none", "none", "clear", "release",
-                 "none", "none"),
-  profiles   = c("validation", "memory,cpu", "memory,cpu", "memory,cpu",
-                 "validation", "memory,cpu", "memory", "memory",
-                 "memory,cpu", "memory,cpu"),
-  heavy      = c(FALSE, FALSE, FALSE, TRUE,
-                 TRUE, FALSE, FALSE, FALSE,
-                 TRUE, TRUE),
-  stringsAsFactors = FALSE
+#' Model run names: [quadra-]<stage>-<size>[-<teardown>]
+#' Labels starting without `quadra-` run TMB by default 
+#' A label that does not parse correctly will stop the script
+labels <- c(
+  "initialize-normal",
+  "initialize-normal-clear",
+  "initialize-normal-release",
+  "optimize-normal",
+  "sdreport-normal",
+  "quadra-optimize-normal",
+  "quadra-sdreport-normal",
+  "initialize-large",
+  "initialize-large-clear",
+  "initialize-large-release",
+  "optimize-large",
+  "sdreport-large",
+  "quadra-optimize-large",
+  "quadra-sdreport-large"
 )
 
-if (!is.null(only)) runs <- runs[runs$label %in% only, , drop = FALSE]
+parse_label <- function(label) {
+  word <- strsplit(label, "-", fixed = TRUE)[[1]]
+  backend <- if (identical(word[[1]], "quadra")) "quadra" else "TMB"
+  if (identical(backend, "quadra")) word <- word[-1]
+  stage <- word[[1]]
+  size <- if (length(word) > 1L) word[[2]] else ""
+  teardown <- if (length(word) > 2L) word[[3]] else "none"
+  wrong <- c(
+    if (length(word) > 3L) "too many parts",
+    if (!stage %in% c("initialize", "tape", "evaluate", "optimize",
+                      "sdreport", "helper")) paste0("unknown stage '", stage, "'"),
+    if (!size %in% c("normal", "large")) paste0("unknown size '", size, "'"),
+    if (!teardown %in% c("none", "clear", "release")) paste0("unknown teardown '", teardown, "'"),
+    if (identical(backend, "quadra") && !stage %in% c("optimize", "sdreport"))
+      "quadra only means something from the optimize rung up"
+  )
+  if (length(wrong)) {
+    stop("Cannot read the run '", label, "': ", paste(wrong, collapse = "; "),
+         ". Expected [quadra-]<stage>-<size>[-<teardown>].", call. = FALSE)
+  }
+  c(stage = stage, size = size, teardown = teardown, backend = backend)
+}
+
+runs <- data.frame(label = labels, stringsAsFactors = FALSE)
+runs[, c("stage", "size", "teardown", "backend")] <-
+  t(vapply(labels, parse_label, character(4)))
+
+# A teardown row asks whether memory is returned, which no CPU profile answers.
+# Leak checks run only at the normal size: memcheck is far slower than Massif,
+# and a leak in the teardown code shows up at any size, so the large teardown
+# rows measure memory alone. sdreport-normal also gets a leak check, for leaks
+# that only appear once the model is fitted.
+runs$profiles <- ifelse(runs$teardown == "none", "memory,cpu",
+                        ifelse(runs$size == "normal", "memory,leaks", "memory"))
+leak_fit <- runs$stage == "sdreport" & runs$size == "normal" & runs$backend == "TMB"
+runs$profiles[leak_fit] <- "memory,cpu,leaks"
+
+# Back-to-back runs at the normal size only: many cycles of the large model
+# would take far too long, and memory that accumulates does so at any size. The
+# loop clears the model every cycle, so the teardown rows add nothing to it.
+bench_rows <- runs$size == "normal" & runs$teardown == "none"
+runs$profiles[bench_rows] <- paste0(runs$profiles[bench_rows], ",bench")
+
+# The expensive combinations: sdreport at all, and optimizing the large model.
+# These are the ones that have run a machine out of memory under Valgrind.
+runs$heavy <- runs$stage == "sdreport" |
+  (runs$size == "large" & runs$stage == "optimize")
+
+# The quadra rows need their own branches, and without them there is nothing to
+# run rather than something to run badly.
+if (is.null(ref_first_quadra) || is.null(ref_compare_quadra)) {
+  if (any(runs$backend == "quadra")) {
+    message("No Quadra branches set, so the quadra rows are skipped. ",
+            "Set ref_first_quadra and ref_compare_quadra to include them.")
+  }
+  runs <- runs[runs$backend != "quadra", , drop = FALSE]
+}
+
+# Which branches each row compares. Held as a list column so one row can carry
+# several compare refs.
+runs$ref_first <- ref_first
+runs$ref_compare <- list(ref_compare)
+quadra_rows <- runs$backend == "quadra"
+if (any(quadra_rows)) {
+  runs$ref_first[quadra_rows] <- ref_first_quadra
+  runs$ref_compare[quadra_rows] <- list(ref_compare_quadra)
+}
+
+# A teardown run means nothing on its own: what clear() or release gave back is
+# its difference from the same stage and size torn down by nothing. So choosing
+# one brings in that partner.
+if (!is.null(only)) {
+  chosen <- runs$teardown != "none" & runs$label %in% only
+  partners <- setdiff(sub("-(clear|release)$", "", runs$label[chosen]), only)
+  partners <- intersect(partners, runs$label)
+  if (length(partners)) {
+    message("Also running ", paste(partners, collapse = ", "),
+            ": teardown runs are compared with the same stage and size without teardown.")
+  }
+  runs <- runs[runs$label %in% c(only, partners), , drop = FALSE]
+}
 if (!isTRUE(run_heavy)) runs <- runs[!runs$heavy, , drop = FALSE]
 if (!nrow(runs)) stop("No runs selected.", call. = FALSE)
 
@@ -91,27 +176,50 @@ for (pkg in c("bench", "remotes")) {
 
 host <- Sys.info()[["sysname"]]
 
+# The profilers are run once, not just looked for on PATH: Valgrind execs a
+# separate tool binary, and perf will exit 0 having recorded nothing when the
+# kernel has no PMU. Both happen on WSL2.
+
 if (any(grepl("memory", runs$profiles))) {
   if (identical(host, "Darwin")) {
     if (!nzchar(Sys.which("xctrace"))) {
       warning("xctrace was not found; allocation traces will be skipped.", call. = FALSE)
     }
-  } else if (!nzchar(Sys.which("valgrind"))) {
-    stop("valgrind is required for memory profiling on ", host, ".", call. = FALSE)
+  } else {
+    massif <- test_valgrind_works()
+    if (!isTRUE(massif)) stop("Memory profiling is not usable here: ", massif, call. = FALSE)
+    message("Valgrind can run Massif here.")
   }
 }
 
 if (any(grepl("cpu", runs$profiles))) {
-  cpu_profiler <- if (identical(host, "Darwin")) "xctrace" else "perf"
-  if (!nzchar(Sys.which(cpu_profiler))) {
-    warning(cpu_profiler, " was not found; runs will still produce memory ",
-            "numbers, but no sampled CPU profile.", call. = FALSE)
+  if (identical(host, "Darwin")) {
+    if (!nzchar(Sys.which("xctrace"))) {
+      stop("xctrace was not found, so no CPU profile can be recorded. Install ",
+           "Xcode, or remove cpu from the runs.", call. = FALSE)
+    }
+  } else {
+    event <- test_perf_works()
+    if (identical(event, "")) {
+      message("perf can record with the default event.")
+    } else if (identical(event, "cpu-clock")) {
+      Sys.setenv(PERF_EVENT = event)
+      message("perf: no hardware PMU here, recording with -e ", event, ".")
+    } else {
+      # Fail fast: a profiler that cannot record here fails every run the same
+      # way, and learning that after the whole analysis wastes all of it.
+      stop("CPU profiling is not usable here: ", event, call. = FALSE)
+    }
   }
 }
 
-if (any(grepl("leaks", runs$profiles)) && !identical(host, "Darwin") &&
-    !nzchar(Sys.which("valgrind"))) {
-  warning("valgrind is required for leak checks on ", host, ".", call. = FALSE)
+if (any(grepl("leaks", runs$profiles))) {
+  detector <- if (identical(host, "Darwin")) "leaks" else "valgrind"
+  if (!nzchar(Sys.which(detector))) {
+    # Fail fast: without the detector every leak check fails the same way.
+    stop(detector, " is required for leak checks on ", host, ". ", FIX_PROFILERS,
+         call. = FALSE)
+  }
 }
 
 # ---- run --------------------------------------------------------------------
@@ -127,18 +235,22 @@ results <- data.frame(
 for (index in seq_len(nrow(runs))) {
   row <- runs[index, ]
   message("\n=== [", index, "/", nrow(runs), "] ", row$label,
+          " | ", row$ref_first, " vs ", paste(row$ref_compare[[1]], collapse = ", "),
           " | stage=", row$stage, " size=", row$size,
-          " teardown=", row$teardown, " profiles=", row$profiles, " ===")
+          " backend=", row$backend, " teardown=", row$teardown,
+          " profiles=", row$profiles, " ===")
 
   started <- Sys.time()
   outcome <- tryCatch(
     run_fims_benchmark(
-      ref_first = ref_first,
-      ref_compare = ref_compare,
+      ref_first = row$ref_first,
+      ref_compare = row$ref_compare[[1]],
       profiles = strsplit(row$profiles, ",")[[1]],
       stage = row$stage,
       size = row$size,
       teardown = row$teardown,
+      backend = row$backend,
+      bench_iterations = bench_iterations,
       label = row$label
     ),
     error = function(e) structure(conditionMessage(e), class = "benchmark_failure")
@@ -156,11 +268,22 @@ for (index in seq_len(nrow(runs))) {
   }
 }
 
-# ---- summary ----------------------------------------------------------------
+# ---- the report --------------------------------------------------------------
+# One document for the whole analysis, built from the results.tsv each run
+# wrote. Sections appear only where the runs produced the measurement, so an
+# analysis of "initialize" alone reports memory and says nothing about a fit.
 
 index_file <- file.path(repo_root, "outputs",
                         paste0(format(Sys.time(), "%Y%m%d"), "_analysis_index.tsv"))
 utils::write.table(results, index_file, sep = "\t", row.names = FALSE, quote = FALSE)
+
+report_file <- file.path(repo_root, "outputs",
+                         paste0(format(Sys.time(), "%Y%m%d"), "_report.md"))
+completed <- results$output_dir[results$status == "ok"]
+if (length(completed)) {
+  system2("Rscript", c(shQuote(file.path(repo_root, "R", "report.R")),
+                       shQuote(report_file), shQuote(completed)))
+}
 
 message("\n=== analysis complete ===")
 print(results[, c("label", "status", "minutes")])

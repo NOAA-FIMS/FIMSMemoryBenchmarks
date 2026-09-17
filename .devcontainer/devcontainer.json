@@ -1,6 +1,7 @@
 {
   "name": "FIMS Memory Benchmarks",
   "image": "ghcr.io/rocker-org/devcontainer/r-ver:4.3",
+  "runArgs": ["--cap-add=PERFMON", "--security-opt", "seccomp=unconfined"],
   "features": {
     "ghcr.io/rocker-org/devcontainer-features/apt-packages:1": {
       "packages": "g++,gcc,libelf-dev,libunwind-dev,libcap2-bin,linux-perf,libgoogle-perftools-dev,make,gdb,time,valgrind",

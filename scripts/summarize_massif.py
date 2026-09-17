@@ -56,7 +56,7 @@ class Run:
 
     @property
     def stage_peak(self) -> "Optional[int]":
-        """Peak above the fixture-only run: what the stage itself allocated."""
+        """Peak above the inputs-only run: what the stage itself allocated."""
         primary = self.primary
         if primary is None or self.baseline is None:
             return None
@@ -79,18 +79,28 @@ def parse_massif(path: Path) -> Profile:
     current: dict[str, int] = {}
     tree_lines: list[str] = []
 
-    def origin(stack: str) -> str:
-        symbol = stack.lower()
-        if "quadra" in symbol:
-            return "Quadra"
-        if "tmbad" in symbol or re.search(r"\btmb(?:::|\b)", symbol):
-            return "TMB/TMBad"
-        if "rcpp" in symbol:
-            return "Rcpp"
-        if re.search(r"\b(rf_|r_|libr(?:\.so)?\b)", symbol):
+    def origin(frames: list[str]) -> str:
+        """Whose code the memory was allocated for.
+
+        Frames run from the allocation outward. R's allocator is nearly always
+        the nearest frame, because objects FIMS's interface creates are still R
+        objects that R allocates, and R's evaluator sits further out again. So
+        the nearest FIMS, TMB, Quadra or Rcpp frame anywhere on the stack names
+        the code responsible. Only a stack with none of those is R's own work,
+        which includes FIMS's R functions: R code never appears on a C stack.
+        """
+        for frame in frames:
+            symbol = frame.lower()
+            if "quadra" in symbol:
+                return "Quadra"
+            if "tmbad" in symbol or re.search(r"\btmb(?:::|\b)", symbol):
+                return "TMB/TMBad"
+            if "rcpp" in symbol:
+                return "Rcpp"
+            if "fims" in symbol:
+                return "FIMS C++ (backend not explicit)"
+        if any(re.search(r"\b(rf_|r_|libr(?:\.so)?\b)", frame.lower()) for frame in frames):
             return "R runtime"
-        if "fims" in symbol:
-            return "FIMS C++ (backend not explicit)"
         return "System/other/unresolved"
 
     def parse_tree() -> tuple[dict[str, int], int]:
@@ -107,9 +117,10 @@ def parse_massif(path: Path) -> Profile:
             frame = match.group(4)
             while ancestors and ancestors[-1][0] >= indent:
                 ancestors.pop()
-            stack = " ".join(item[1] for item in ancestors) + " " + frame
             if child_count == 0:
-                category = origin(stack)
+                # ancestors[0] is the root, "(heap allocation functions)"; the
+                # frames below it run from the allocation site outward.
+                category = origin([item[1] for item in ancestors[1:]] + [frame])
                 origins[category] = origins.get(category, 0) + size
                 attributed += size
             else:
@@ -127,6 +138,11 @@ def parse_massif(path: Path) -> Profile:
             profile.peak_heap = current.get("mem_heap_B", 0)
             profile.peak_extra = current.get("mem_heap_extra_B", 0)
             profile.peak_stacks = current.get("mem_stacks_B", 0)
+        # Origins come only from the snapshot Massif marks as its peak, which is
+        # the only one guaranteed to carry a full allocation tree. Taking them from
+        # any snapshot that ties the peak total let a memory plateau after the
+        # peak -- whose snapshots carry no tree -- overwrite them with nothing.
+        if current.get("heap_tree") == "peak":
             profile.peak_origins, profile.peak_attributed_heap = parse_tree()
         # Snapshots are written in order, so the last one is the exit state.
         profile.final_heap = current.get("mem_heap_B", 0)
@@ -144,6 +160,8 @@ def parse_massif(path: Path) -> Profile:
                 finish_snapshot()
                 current = {"snapshot": int(line.split("=", 1)[1])}
                 tree_lines = []
+            elif line.startswith("heap_tree="):
+                current["heap_tree"] = line.split("=", 1)[1].strip()
             elif re.match(r"^\s*n\d+:\s+\d+\s+", line):
                 tree_lines.append(line)
             elif "=" in line:
@@ -296,11 +314,11 @@ def render(runs: list[Run], report_path: Path) -> str:
     if with_baseline:
         lines.extend([
             "", "## Stage-attributable memory", "",
-            "Each ref was also profiled building the fixture and stopping before the "
+            "Each ref was also profiled building the inputs and stopping before the "
             "stage. Subtracting that leaves what the stage itself allocated, without R "
             "start-up, the data, or the parameter edits, which are identical across refs.",
             "",
-            "| Git ref | Fixture peak | Stage peak | Fixture retained | Stage retained |",
+            "| Git ref | Inputs peak | Stage peak | Inputs retained | Stage retained |",
             "|---|---:|---:|---:|---:|",
         ])
         for run in with_baseline:
@@ -359,8 +377,10 @@ def main() -> int:
     parser.add_argument("--run", nargs=3, action="append", metavar=("REF", "VERSION", "PREFIX"), required=True)
     parser.add_argument("--baseline", nargs=2, action="append", default=[],
                         metavar=("REF", "PREFIX"),
-                        help="fixture-only profile for REF, subtracted from its stage run")
-    parser.add_argument("--output", type=Path, required=True)
+                        help="inputs-only profile for REF, subtracted from its stage run")
+    parser.add_argument("--output", type=Path,
+                        help="Render Markdown here. Omit for tidy rows only, "
+                             "which is what the benchmark asks for.")
     parser.add_argument("--tidy-out", type=Path,
                         help="also write what was parsed as tidy rows")
     args = parser.parse_args()
@@ -379,7 +399,7 @@ def main() -> int:
                 print(f"warning: could not parse {path}: {error}")
         runs.append(Run(ref=ref, version=version, prefix=prefix, profiles=profiles))
 
-    # The fixture-only run for each ref, so the report can subtract R start-up,
+    # The inputs-only run for each ref, so the report can subtract R start-up,
     # the data and the parameter edits and report the stage's own cost.
     for ref, prefix_text in args.baseline:
         prefix = Path(prefix_text)
@@ -411,13 +431,20 @@ def main() -> int:
         if run.baseline is not None:
             values["stage_peak"] = run.stage_peak
             values["stage_retained"] = run.stage_retained
-            values["fixture_peak"] = run.baseline.peak_total
-            values["fixture_retained"] = run.baseline.retained_total
-            byte_metrics |= {"fixture_peak", "fixture_retained"}
+            values["inputs_peak"] = run.baseline.peak_total
+            values["inputs_retained"] = run.baseline.retained_total
+            byte_metrics |= {"inputs_peak", "inputs_retained"}
         for metric, value in values.items():
             rows.append({"ref": run.ref, "fims_version": run.version, "source": "massif",
                          "metric": metric,
                          "unit": "bytes" if metric in byte_metrics else "count",
+                         "value": value, "path": primary.path.name})
+        # Which code allocated the peak. This is the one thing Massif knows that
+        # a total cannot tell you, so it belongs in the rows and not only in a
+        # rendered report.
+        for name, value in (primary.peak_origins or {}).items():
+            rows.append({"ref": run.ref, "fims_version": run.version, "source": "massif",
+                         "metric": f"origin:{name}", "unit": "bytes",
                          "value": value, "path": primary.path.name})
         for profile in run.profiles:
             for metric, value in (("process_peak_total", profile.peak_total),
@@ -429,9 +456,10 @@ def main() -> int:
                              "value": value, "path": profile.path.name})
     write_rows(args.tidy_out, rows)
 
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(render(runs, args.output), encoding="utf-8")
-    print(f"Markdown report written to {args.output}")
+    if args.output is not None:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(render(runs, args.output), encoding="utf-8")
+        print(f"Markdown report written to {args.output}")
     return 0
 
 

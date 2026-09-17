@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Record the memory profile of ONE measurement.
 #
-# This wraps a profiler around R/run_stage.R and nothing else: no installs, no
+# This wraps a profiler around R/single_model_run.R and nothing else: no installs, no
 # loops, no reporting. run_fims_benchmark() in R/run_benchmark.R owns all of
 # that and calls this once per ref per round, so you can also run it by hand to
 # reproduce a single profile.
 #
-#   scripts/memory.sh --tool massif --lib outputs/<run>/lib/debug/main \
+#   scripts/memory.sh --tool massif --lib outputs/.lib-cache/debug/main \
 #     --stage initialize --out outputs/<run>/massif_main.out.round1
 #
 # --tool massif        Valgrind Massif (Linux)
@@ -22,11 +22,11 @@ TOOL=""
 LIB=""
 STAGE="${FIMS_STAGE:-initialize}"
 SIZE="${FIMS_SIZE:-normal}"
+BACKEND="${FIMS_BACKEND:-TMB}"
 STAGE_MODE="stage"
 TEARDOWN="${TEARDOWN:-none}"
 OUT=""
 LOG=""
-SIGNATURE=""
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 ATTACH_DELAY="${FIMS_INSTRUMENTS_ATTACH_DELAY:-6}"
 TIME_LIMIT="${INSTRUMENTS_TIME_LIMIT:-30m}"
@@ -37,11 +37,11 @@ while [[ $# -gt 0 ]]; do
     --lib) LIB="$2"; shift 2 ;;
     --stage) STAGE="$2"; shift 2 ;;
     --size) SIZE="$2"; shift 2 ;;
+    --backend) BACKEND="$2"; shift 2 ;;
     --mode) STAGE_MODE="$2"; shift 2 ;;
     --teardown) TEARDOWN="$2"; shift 2 ;;
     --out) OUT="$2"; shift 2 ;;
     --log) LOG="$2"; shift 2 ;;
-    --signature) SIGNATURE="$2"; shift 2 ;;
     --repo-root) REPO_ROOT="$2"; shift 2 ;;
     --attach-delay) ATTACH_DELAY="$2"; shift 2 ;;
     --time-limit) TIME_LIMIT="$2"; shift 2 ;;
@@ -56,7 +56,7 @@ for required in TOOL LIB OUT; do
   fi
 done
 
-WORKLOAD="$REPO_ROOT/R/run_stage.R"
+WORKLOAD="$REPO_ROOT/R/single_model_run.R"
 [[ -f "$WORKLOAD" ]] || { echo "Error: $WORKLOAD is missing." >&2; exit 1; }
 [[ -n "$LOG" ]] || LOG="${OUT}.log"
 
@@ -67,26 +67,25 @@ run_workload() {
   R_LIBS="$LIB" \
     REPO_ROOT="$REPO_ROOT" \
     FIMS_STAGE="$STAGE" \
-  FIMS_SIZE="$SIZE" \
     FIMS_SIZE="$SIZE" \
+    FIMS_BACKEND="$BACKEND" \
     STAGE_MODE="$STAGE_MODE" \
     TEARDOWN="$TEARDOWN" \
-    STAGE_SIGNATURE_OUT="$SIGNATURE" \
     STAGE_ATTACH_DELAY="$DELAY_FOR_RUN" \
     "$@"
 }
 
 case "$TOOL" in
   massif)
-    command -v valgrind >/dev/null 2>&1 || { echo "Error: valgrind not found." >&2; exit 1; }
+    command -v valgrind >/dev/null 2>&1 || { echo "Error: valgrind not found. See \"Fixing Valgrind and perf installation\" in README.md." >&2; exit 1; }
     echo "=== Massif: stage=$STAGE mode=$STAGE_MODE -> ${OUT}_<pid> ==="
     # Massif's defaults exist for a reason: --threshold=0 keeps every entry in
     # every detailed snapshot tree, which on R plus TMB stacks produced output
     # files approaching a gigabyte per process and filled the disk.
     # --trace-children is required, not optional: Rscript is a launcher that
     # execs the real R binary, and without this Valgrind stops at the exec and
-    # writes no output at all. It also means one file per process, so collect.py
-    # takes the largest peak.
+    # writes no output at all. It also means one file per process, so
+    # summarize_massif.py takes the largest peak.
     run_workload valgrind --tool=massif \
       --trace-children=yes \
       --trace-children-skip=/bin/*,/usr/bin/* \
@@ -109,7 +108,7 @@ case "$TOOL" in
     echo "=== Instruments Allocations: stage=$STAGE -> $OUT ==="
     # Rscript launches too quickly for Instruments to inject reliably, so R is
     # started first and xctrace attaches to its live PID. The workload waits in
-    # STAGE_ATTACH_DELAY, after loading the fixture, so the recording covers the
+    # STAGE_ATTACH_DELAY, after loading the inputs, so the recording covers the
     # stage rather than R's start-up.
     DELAY_FOR_RUN="$ATTACH_DELAY" run_workload Rscript "$WORKLOAD" &
     workload_pid=$!
