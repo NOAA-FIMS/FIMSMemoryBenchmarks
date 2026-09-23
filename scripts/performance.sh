@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # Record the CPU profile of ONE measurement.
 #
-# This wraps a sampling profiler around R/single_model_run.R and nothing else: no
+# This wraps a sampling profiler around run_model_for_cpp_profiler() and nothing else: no
 # installs, no loops, no reporting, and no timing. run_fims_benchmark() owns all
 # of that. Timing is not here at all -- nothing wraps a timed run, so R launches
 # those itself.
 #
-#   scripts/performance.sh --tool perf --lib outputs/<run>/lib/profile/main \
-#     --stage initialize --out outputs/<run>/perf_main.data
+#   R_LIBS=outputs/.lib-cache/profile/main FIMS_STAGE=initialize \
+#     scripts/performance.sh --tool perf --out outputs/<run>/perf_main.data
+#
+# The model settings come from the environment: R_LIBS picks the build, and
+# FIMS_STAGE, FIMS_SIZE, FIMS_BACKEND, TEARDOWN and FIMS_N_EVAL are read by
+# run_model_for_cpp_profiler(). This wrapper only decides the profiler.
 #
 # --tool perf          Linux perf
 # --tool instruments   Instruments Time Profiler (macOS)
@@ -20,48 +24,43 @@
 set -euo pipefail
 
 TOOL=""
-LIB=""
-STAGE="${FIMS_STAGE:-initialize}"
-SIZE="${FIMS_SIZE:-normal}"
-BACKEND="${FIMS_BACKEND:-TMB}"
-TEARDOWN="${TEARDOWN:-none}"
 OUT=""
 REPORT=""
 LOG=""
-N_EVAL="${FIMS_N_EVAL:-1}"
 PERF_EVENT="${PERF_EVENT:-}"
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+export REPO_ROOT
 ATTACH_DELAY="${FIMS_INSTRUMENTS_ATTACH_DELAY:-6}"
 TIME_LIMIT="${INSTRUMENTS_TIME_LIMIT:-30m}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --tool) TOOL="$2"; shift 2 ;;
-    --lib) LIB="$2"; shift 2 ;;
-    --stage) STAGE="$2"; shift 2 ;;
-    --size) SIZE="$2"; shift 2 ;;
-    --backend) BACKEND="$2"; shift 2 ;;
-    --teardown) TEARDOWN="$2"; shift 2 ;;
     --out) OUT="$2"; shift 2 ;;
     --report) REPORT="$2"; shift 2 ;;
     --log) LOG="$2"; shift 2 ;;
-    --n-eval) N_EVAL="$2"; shift 2 ;;
     --event) PERF_EVENT="$2"; shift 2 ;;
-    --repo-root) REPO_ROOT="$2"; shift 2 ;;
     --attach-delay) ATTACH_DELAY="$2"; shift 2 ;;
     --time-limit) TIME_LIMIT="$2"; shift 2 ;;
     *) echo "Error: unknown argument '$1'." >&2; exit 2 ;;
   esac
 done
 
-for required in TOOL LIB OUT; do
+if [[ -z "${R_LIBS:-}" ]]; then
+  echo "Error: R_LIBS must point at the FIMS build to measure." >&2
+  exit 2
+fi
+
+for required in TOOL OUT; do
   if [[ -z "${!required}" ]]; then
     echo "Error: --${required,,} is required." >&2
     exit 2
   fi
 done
 
-WORKLOAD="$REPO_ROOT/R/single_model_run.R"
+WORKLOAD="$REPO_ROOT/R/run_model_for_profilers.R"
+# The file only defines functions, so the process sources it and calls one.
+WORKLOAD_CALL="source(file.path(Sys.getenv('REPO_ROOT'), 'R', 'run_model_for_profilers.R')); run_model_for_cpp_profiler()"
 [[ -f "$WORKLOAD" ]] || { echo "Error: $WORKLOAD is missing." >&2; exit 1; }
 [[ -n "$LOG" ]] || LOG="${OUT}.log"
 [[ -n "$REPORT" ]] || REPORT="${OUT%.data}.txt"
@@ -69,16 +68,10 @@ WORKLOAD="$REPO_ROOT/R/single_model_run.R"
 DELAY_FOR_RUN=0
 
 run_workload() {
-  R_LIBS="$LIB" \
-    REPO_ROOT="$REPO_ROOT" \
-    FIMS_STAGE="$STAGE" \
-    FIMS_SIZE="$SIZE" \
-    FIMS_BACKEND="$BACKEND" \
-    STAGE_MODE=stage \
-    TEARDOWN="$TEARDOWN" \
-    FIMS_N_EVAL="$N_EVAL" \
-    STAGE_ATTACH_DELAY="$DELAY_FOR_RUN" \
-    "$@"
+  # Every model setting arrives in the environment from
+  # run_fims_benchmark(); the only thing this wrapper decides is when the
+  # recorder starts.
+  STAGE_ATTACH_DELAY="$DELAY_FOR_RUN" "$@"
 }
 
 case "$TOOL" in
@@ -88,7 +81,7 @@ case "$TOOL" in
       echo "Warning: perf not found; see \"Fixing Valgrind and perf installation\" in README.md." >&2
       exit 0
     fi
-    echo "=== perf: stage=$STAGE -> $OUT ===" >&2
+    echo "=== perf: stage=${FIMS_STAGE:-initialize} -> $OUT ===" >&2
     # -D skips the start-up window, so the samples are the stage rather than R
     # loading packages. The workload waits the same amount before starting.
     delay_ms=$(( ATTACH_DELAY * 1000 ))
@@ -98,7 +91,7 @@ case "$TOOL" in
     [[ -n "$PERF_EVENT" ]] && event_args=(-e "$PERF_EVENT")
     if DELAY_FOR_RUN="$ATTACH_DELAY" run_workload \
       perf record -g -D "$delay_ms" ${event_args[@]+"${event_args[@]}"} \
-      -o "$OUT" -- Rscript "$WORKLOAD" >&2; then
+      -o "$OUT" -- Rscript -e "$WORKLOAD_CALL" >&2; then
       # --no-children reports self time. Without it perf reports cumulative
       # time, which ranks call-graph roots (R's evaluator) rather than the
       # functions actually running.
@@ -123,10 +116,10 @@ case "$TOOL" in
       echo "Warning: xctrace not found; install and select Xcode for CPU profiling." >&2
       exit 0
     fi
-    echo "=== Instruments Time Profiler: stage=$STAGE -> $OUT ===" >&2
+    echo "=== Instruments Time Profiler: stage=${FIMS_STAGE:-initialize} -> $OUT ===" >&2
     # As in memory.sh: attach to a live process, with the workload waiting after
     # the inputs are loaded so the trace covers the stage.
-    DELAY_FOR_RUN="$ATTACH_DELAY" run_workload Rscript "$WORKLOAD" >&2 &
+    DELAY_FOR_RUN="$ATTACH_DELAY" run_workload Rscript -e "$WORKLOAD_CALL" >&2 &
     workload_pid=$!
 
     status="captured"

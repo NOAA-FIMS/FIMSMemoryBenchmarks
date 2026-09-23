@@ -17,7 +17,7 @@
 # the baseline, and ref_compare takes any number of them, so adding a third
 # branch is one more entry rather than another pass.
 ref_first <- "8bdd020"                          # baseline
-ref_compare <- c("update-R-with-XPtr-interface")
+ref_compare <- c("update-R-with-XPtr-interface", "remove-direct-rcpp-main")
 
 # Quadra is a special case and comparisons require a FIMS branch with quadra
 # implemented. Setting the two refs bellow to `NULL` will skip the four "quadra-" 
@@ -67,17 +67,17 @@ labels <- c(
   "initialize-normal",
   "initialize-normal-clear",
   "initialize-normal-release",
-  "optimize-normal",
-  "sdreport-normal",
-  "quadra-optimize-normal",
-  "quadra-sdreport-normal",
+  "optimize-normal-clear",
+  "sdreport-normal-clear",
+  "helper-normal-clear",
+  "quadra-helper-normal-clear",
   "initialize-large",
   "initialize-large-clear",
   "initialize-large-release",
-  "optimize-large",
-  "sdreport-large",
-  "quadra-optimize-large",
-  "quadra-sdreport-large"
+  "optimize-large-clear",
+  "sdreport-large-clear",
+  "helper-large-clear",
+  "quadra-helper-large-clear"
 )
 
 parse_label <- function(label) {
@@ -93,8 +93,8 @@ parse_label <- function(label) {
                       "sdreport", "helper")) paste0("unknown stage '", stage, "'"),
     if (!size %in% c("normal", "large")) paste0("unknown size '", size, "'"),
     if (!teardown %in% c("none", "clear", "release")) paste0("unknown teardown '", teardown, "'"),
-    if (identical(backend, "quadra") && !stage %in% c("optimize", "sdreport"))
-      "quadra only means something from the optimize rung up"
+    if (identical(backend, "quadra") && !identical(stage, "helper"))
+      "quadra runs only at the helper stage"
   )
   if (length(wrong)) {
     stop("Cannot read the run '", label, "': ", paste(wrong, collapse = "; "),
@@ -107,21 +107,18 @@ runs <- data.frame(label = labels, stringsAsFactors = FALSE)
 runs[, c("stage", "size", "teardown", "backend")] <-
   t(vapply(labels, parse_label, character(4)))
 
-# A teardown row asks whether memory is returned, which no CPU profile answers.
-# Leak checks run only at the normal size: memcheck is far slower than Massif,
-# and a leak in the teardown code shows up at any size, so the large teardown
-# rows measure memory alone. sdreport-normal also gets a leak check, for leaks
-# that only appear once the model is fitted.
-runs$profiles <- ifelse(runs$teardown == "none", "memory,cpu",
-                        ifelse(runs$size == "normal", "memory,leaks", "memory"))
-leak_fit <- runs$stage == "sdreport" & runs$size == "normal" & runs$backend == "TMB"
-runs$profiles[leak_fit] <- "memory,cpu,leaks"
+# Every row gets the memory profile. A teardown row also asks whether memory is
+# returned, which no CPU profile answers, so those skip it.
+runs$profiles <- ifelse(runs$teardown == "none", "memory,cpu", "memory")
 
-# Back-to-back runs at the normal size only: many cycles of the large model
-# would take far too long, and memory that accumulates does so at any size. The
-# loop clears the model every cycle, so the teardown rows add nothing to it.
-bench_rows <- runs$size == "normal" & runs$teardown == "none"
-runs$profiles[bench_rows] <- paste0(runs$profiles[bench_rows], ",bench")
+# Leak checks and back-to-back runs at the normal size only: memcheck is far
+# slower than Massif, many cycles of the large model would take far too long,
+# and memory that leaks or accumulates does so at either size. Within the normal
+# size every row gets both, teardown rows included -- whether a teardown
+# actually returns the memory is the question they exist to answer, and the
+# back-to-back cycle now tears down the way its row does.
+both <- runs$size == "normal"
+runs$profiles[both] <- paste0(runs$profiles[both], ",leaks,bench")
 
 # The expensive combinations: sdreport at all, and optimizing the large model.
 # These are the ones that have run a machine out of memory under Valgrind.

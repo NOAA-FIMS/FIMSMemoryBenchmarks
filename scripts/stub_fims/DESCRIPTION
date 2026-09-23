@@ -1,0 +1,9 @@
+Package: FIMS
+Version: 0.0.0.9999
+Title: Stand-in for FIMS, for the benchmark's tests
+Description: Just enough of FIMS's interface for setup_fims_model() to run its
+    initialize rung, so the model functions can be tested without building
+    the real package.
+Author: FIMSMemoryBenchmarks
+Maintainer: FIMSMemoryBenchmarks <noreply@example.com>
+License: GPL-3

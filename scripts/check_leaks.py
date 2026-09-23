@@ -123,7 +123,10 @@ def run(ref, output):
             # FIMS_BACKEND, TEARDOWN and FIMS_SIZE come from the environment. The
             # script writes FIMS_LEAK_COMPLETED just before it exits, after gc(),
             # which is how a finished run is told apart from a crash.
-            workload = "source(file.path(Sys.getenv('REPO_ROOT'), 'R', 'single_model_run.R'))"
+            # The file only defines functions, so the workload sources it and
+            # calls the one that runs the model once.
+            workload = ("source(file.path(Sys.getenv('REPO_ROOT'), 'R', 'run_model_for_profilers.R')); "
+                        "run_model_for_cpp_profiler()")
             command = [str(Path(r_home) / 'bin/exec/R'), '--vanilla', '--slave', '-e', workload]
             if host == 'Darwin':
                 env['MallocStackLogging'] = '1'

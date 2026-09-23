@@ -12,8 +12,6 @@
 
 path_safe <- function(value) gsub("[^A-Za-z0-9._-]", "_", value)
 
-`%||%` <- function(x, y) if (is.null(x)) y else x
-
 # ---------------------------------------------------------------------------
 # Does each profiler work here?
 # ---------------------------------------------------------------------------
@@ -176,6 +174,136 @@ run_logged <- function(command, args, env = character(), log) {
   list(status = if (is.null(status)) 0L else as.integer(status), output = output)
 }
 
+
+#' Tidy rows from one reference run
+#'
+#' The reference run saves what the model computed, whole, to an RDS. This turns
+#' it into the rows results.tsv holds: peak memory and page faults, the fit where
+#' there is one, and one row per parameter value, estimate and standard error.
+#' On macOS the memory numbers come from the /usr/bin/time -l file written next
+#' to the RDS instead.
+#'
+#' @param ref Git ref the run measured.
+#' @param path The reference run's RDS.
+#' @param version FIMS version of the build, for the rows.
+#' @return A data frame of tidy rows; run_fims_benchmark() fills the columns
+#'   only it knows, such as stage and size.
+reference_rows <- function(ref, path, version = "") {
+  values <- readRDS(path)
+
+  # macOS writes these to the /usr/bin/time -l file rather than the RDS.
+  time_metrics <- function(time_path) {
+    if (!file.exists(time_path)) return(list())
+    text <- readLines(time_path, warn = FALSE)
+    grab <- function(label) {
+      hit <- Filter(length, regmatches(text, regexec(
+        paste0("^\\s*([0-9]+)\\s+", label, "\\s*$"), text)))
+      if (length(hit)) as.numeric(hit[[1]][[2]]) else NULL
+    }
+    list(maximum_rss = grab("maximum resident set size"),
+         peak_footprint = grab("peak memory footprint"),
+         page_reclaims = grab("page reclaims"),
+         page_faults = grab("page faults"),
+         swaps = grab("swaps"))
+  }
+  from_time <- time_metrics(sub("[.]rds$", "_time.txt", path))
+
+  # Standard errors are the Std. Error column of TMB's summary of the fixed
+  # effects; sd_fixed is the name older runs saved them under.
+  standard_errors <- if (!is.null(values$sdr_fixed)) {
+    unname(values$sdr_fixed[, "Std. Error"])
+  } else {
+    values$sd_fixed
+  }
+
+  recorded <- list(
+    maximum_rss = if (is.null(from_time$maximum_rss)) values$maximum_rss
+                  else from_time$maximum_rss,
+    stage_rss_added = values$stage_rss_added,
+    peak_footprint = from_time$peak_footprint,
+    page_reclaims = if (is.null(from_time$page_reclaims)) values$page_reclaims
+                    else from_time$page_reclaims,
+    page_faults = if (is.null(from_time$page_faults)) values$page_faults
+                  else from_time$page_faults,
+    swaps = from_time$swaps,
+    final_objective = values$final_objective,
+    initial_objective = values$initial_objective,
+    final_gradient_max = if (is.null(values$final_gradient)) NULL else max(abs(values$final_gradient)),
+    sd_fixed_max = if (is.null(standard_errors)) NULL else max(standard_errors),
+    iterations = values$iterations,
+    function_evaluations = values$function_evaluations,
+    gradient_evaluations = values$gradient_evaluations,
+    convergence = values$convergence,
+    n_fixed = values$n_fixed, n_random = values$n_random)
+  recorded <- recorded[!vapply(recorded, is.null, logical(1))]
+
+  # One row per value. Parameter values carry their names, since the report
+  # shows them; estimates and standard errors are numbered only, because the
+  # report reads them back as estimate:<n> and standard_error:<n>.
+  numbered <- function(prefix, x) {
+    if (is.null(x) || !length(x)) return(NULL)
+    x <- unlist(x)
+    stats::setNames(as.list(unname(x)), paste0(prefix, seq_along(x)))
+  }
+  # initial_parameters is a list from initialize_fims() and a named vector from
+  # parList(); unlist() turns either into one named vector.
+  named <- function(prefix, x) {
+    if (is.null(x) || !length(x)) return(NULL)
+    x <- unlist(x)
+    labels <- if (is.null(names(x))) rep("", length(x)) else names(x)
+    stats::setNames(as.list(unname(x)), paste0(prefix, seq_along(x), ":", labels))
+  }
+  # sdreport returns a summary per kind: the fixed effects, the random effects
+  # and the derived quantities. The random and derived summaries carry their own
+  # estimates, so each is kept whole rather than lined up against the parameter
+  # vector, which is numbered across all three.
+  summary_rows <- function(kind, summary) {
+    if (is.null(summary) || !NROW(summary)) return(NULL)
+    labels <- if (is.null(rownames(summary))) rep("", NROW(summary)) else rownames(summary)
+    tags <- paste0(seq_len(NROW(summary)), ":", labels)
+    c(stats::setNames(as.list(unname(summary[, "Estimate"])),
+                      paste0(kind, "_estimate:", tags)),
+      stats::setNames(as.list(unname(summary[, "Std. Error"])),
+                      paste0(kind, "_error:", tags)))
+  }
+  # Both summaries grow with the model: one random effect per year, one derived
+  # value per year or per year and age. Two builds that agree at 30 years will
+  # agree at 120, so only the normal size records them and the large runs stay
+  # about memory.
+  model_size <- if (is.null(values$model_size)) "normal" else values$model_size
+  whole_fit <- identical(model_size, "normal")
+  recorded <- c(recorded,
+                named("parameter:", values$initial_parameters),
+                numbered("estimate:", values$final_parameters),
+                numbered("standard_error:", standard_errors),
+                if (whole_fit) summary_rows("random", values$random),
+                if (whole_fit) summary_rows("derived", values$report))
+
+  # Whole numbers (bytes, counts) written out in full, not as 3.59e+08, so
+  # results.tsv reads cleanly in any tool; parameters keep full precision.
+  as_text <- function(x) {
+    x <- x[[1L]]
+    if (is.numeric(x) && is.finite(x) && x == round(x) && abs(x) < 1e15) {
+      formatC(x, format = "f", digits = 0L)
+    } else {
+      format(x, digits = 15L)
+    }
+  }
+  metric <- names(recorded)
+  data.frame(
+    ref = ref, source = "reference", fims_version = version,
+    # Which entry points the build used, where the merge only knows what was
+    # asked for.
+    backend = if (is.null(values$backend)) "" else values$backend,
+    metric = metric,
+    unit = ifelse(metric %in% c("maximum_rss", "stage_rss_added", "peak_footprint"), "bytes",
+           ifelse(grepl(paste0("objective|gradient|sd_|^parameter:|^estimate:|",
+                               "^standard_error:|^random_|^derived_"),
+                        metric), "value", "count")),
+    value = unname(vapply(recorded, as_text, character(1))),
+    path = basename(path),
+    stringsAsFactors = FALSE)
+}
 
 #' Compare two FIMS refs on one stage of the interface ladder
 #'
@@ -425,10 +553,9 @@ run_fims_benchmark <- function(ref_first = "main",
       round = round, tag = tag, path = path, stringsAsFactors = FALSE)
   }
 
-  profile_run <- function(script, args, capture = FALSE) {
-    args <- c(shQuote(file.path(repo_root, "scripts", script)), args,
-              "--repo-root", shQuote(repo_root))
-    result <- run_logged("bash", args, log = log_file)
+  profile_run <- function(script, args, env = character(), capture = FALSE) {
+    args <- c(shQuote(file.path(repo_root, "scripts", script)), args)
+    result <- run_logged("bash", args, env = env, log = log_file)
     if (capture) {
       # The wrapper prints one status word, but its diagnostics land in the same
       # captured stream, so match the word rather than trusting the last line.
@@ -442,6 +569,59 @@ run_fims_benchmark <- function(ref_first = "main",
 
   status <- integer()
 
+  # One place that says what the model run is. Every measurement inherits these,
+  # profiled or not, so a setting is written here and read by Sys.getenv() in the
+  # script that uses it, with nothing in between translating it.
+  model_env <- function(build_type, ref, ...) {
+    c(paste0("R_LIBS=", shQuote(builds[[build_type]][[ref]]$lib)),
+      paste0("REPO_ROOT=", shQuote(repo_root)),
+      paste0("FIMS_STAGE=", stage),
+      paste0("FIMS_SIZE=", size),
+      paste0("FIMS_BACKEND=", backend),
+      paste0("TEARDOWN=", teardown),
+      paste0("FIMS_N_EVAL=", as.integer(n_eval)),
+      ...)
+  }
+
+  # The R side of every unprofiled model process: a fresh Rscript that sources
+  # the model functions and calls one. It finds the file through REPO_ROOT,
+  # which model_env() sets, so the path needs no quoting of its own.
+  r_call <- function(fn) {
+    c("-e", shQuote(paste0("source(file.path(Sys.getenv('REPO_ROOT'), 'R', ",
+                           "'run_model_for_profilers.R')); ", fn, "()")))
+  }
+
+    # The reference run: the stage once more per ref, on the optimized build, with
+  # no profiler attached. It is the source of every "what a user would see"
+  # number -- peak resident memory -- and of validation: the parameter values
+  # the model holds at the end of the rung, and from optimize up the fit.
+  # Profilers are for attribution; they distort both of these. Timing is not
+  # taken from it: that belongs to bench::mark(), which repeats.
+  #
+  # Peak RSS comes from the kernel's VmHWM on Linux, read inside the run. macOS
+  # has no /proc, so there the run goes under /usr/bin/time -l.
+  values_args <- character()
+  for (ref in refs) {
+    build <- builds[["profile"]][[ref]]
+    out <- file.path(output_dir, paste0("reference_", path_safe(ref), ".rds"))
+    time_out <- sub("[.]rds$", "_time.txt", out)
+    message("  reference run (unprofiled, optimized build): ", ref)
+    command <- if (identical(host, "Darwin")) "/usr/bin/time" else "Rscript"
+    args <- c(if (identical(host, "Darwin")) c("-l", "-o", shQuote(time_out), "Rscript"),
+              r_call("run_model_for_cpp_profiler"))
+    code <- run_logged(
+      command, args,
+      env = model_env("profile", ref, paste0("VALUES_OUT=", shQuote(out))),
+      log = log_file)$status
+    # Fail fast: without this run there is no peak RSS and no validation.
+    if (code != 0L || !file.exists(out)) {
+      stop("Reference run for '", ref, "' exited with status ", code, ". See ",
+           log_file, call. = FALSE)
+    }
+    values_args <- c(values_args, shQuote(ref), shQuote(out))
+  }
+  status[["reference"]] <- 0L
+
   if ("memory" %in% profiles) {
     tool <- if (identical(host, "Darwin")) "time" else "massif"
     kind <- if (identical(host, "Darwin")) "time" else "massif"
@@ -454,10 +634,8 @@ run_fims_benchmark <- function(ref_first = "main",
         out <- file.path(output_dir, paste0("baseline_", path_safe(ref), ".out"))
         message("  memory baseline: ", ref)
         code <- profile_run("memory.sh",
-                            c("--tool", tool, "--lib", shQuote(build$lib),
-                              "--stage", stage, "--size", size,
-                              "--backend", backend, "--mode", "inputs",
-                              "--teardown", teardown, "--out", shQuote(out)))
+                            c("--tool", tool, "--out", shQuote(out)),
+                            env = model_env("debug", ref, "STAGE_MODE=inputs"))
         # Fail on the first failure rather than repeating it for every ref and
         # profiler: when the model itself is broken, every later measurement
         # fails the same way and each one is slow.
@@ -475,12 +653,10 @@ run_fims_benchmark <- function(ref_first = "main",
         trace <- file.path(output_dir, paste0("alloc_", path_safe(ref), ".trace"))
         message("  Instruments allocations: ", ref)
         profile_run("memory.sh",
-                    c("--tool", "instruments", "--lib", shQuote(build$lib),
-                      "--stage", stage, "--size", size, "--backend", backend,
-                      "--teardown", teardown,
-                      "--out", shQuote(trace),
+                    c("--tool", "instruments", "--out", shQuote(trace),
                       "--attach-delay", instruments_attach_delay,
-                      "--time-limit", instruments_time_limit))
+                      "--time-limit", instruments_time_limit),
+                    env = model_env("debug", ref, "STAGE_MODE=stage"))
         add_input("instruments-alloc", ref, stage, 1L, "", trace)
         trace_status[[ref]] <- if (file.exists(trace)) "captured" else "failed"
         trace_paths[[ref]] <- trace
@@ -494,10 +670,8 @@ run_fims_benchmark <- function(ref_first = "main",
       out <- file.path(output_dir, paste0("massif_", path_safe(ref), ".out"))
       message("  memory profile: ", ref)
       code <- profile_run("memory.sh",
-                          c("--tool", tool, "--lib", shQuote(build$lib),
-                            "--stage", stage, "--size", size,
-                            "--backend", backend, "--mode", "stage",
-                            "--teardown", teardown, "--out", shQuote(out)))
+                          c("--tool", tool, "--out", shQuote(out)),
+                          env = model_env("debug", ref, "STAGE_MODE=stage"))
       if (code != 0L) {
         stop("Memory profile for '", ref, "' exited with status ", code,
              ". See ", log_file, call. = FALSE)
@@ -510,9 +684,10 @@ run_fims_benchmark <- function(ref_first = "main",
         # macOS: the memory run is /usr/bin/time, so this is where its maximum
         # RSS and peak footprint are, whether or not Instruments also ran.
         native_profiles[[ref]] <- out
+        trace <- if (is.null(trace_status[[ref]])) "not run" else trace_status[[ref]]
+        trace_path <- if (is.null(trace_paths[[ref]])) "none" else trace_paths[[ref]]
         summary_args <- c(summary_args, "--run", shQuote(ref), shQuote(build$version),
-                          shQuote(out), shQuote(trace_status[[ref]] %||% "not run"),
-                          shQuote(trace_paths[[ref]] %||% "none"))
+                          shQuote(out), shQuote(trace), shQuote(trace_path))
       }
     }
 
@@ -529,14 +704,12 @@ run_fims_benchmark <- function(ref_first = "main",
       report <- file.path(output_dir, paste0("cpu_", path_safe(ref), ".txt"))
       message("  CPU profile: ", ref)
       state <- profile_run("performance.sh",
-                           c("--tool", tool, "--lib", shQuote(build$lib),
-                             "--stage", stage, "--size", size,
-                             "--backend", backend, "--teardown", teardown,
-                             "--out", shQuote(out), "--report", shQuote(report),
-                             "--n-eval", n_eval,
+                           c("--tool", tool, "--out", shQuote(out),
+                             "--report", shQuote(report),
                              "--event", shQuote(Sys.getenv("PERF_EVENT", "")),
                              "--attach-delay", instruments_attach_delay,
                              "--time-limit", instruments_time_limit),
+                           env = model_env("profile", ref, "STAGE_MODE=stage"),
                            capture = TRUE)
       cpu_states[[ref]] <- state
       # Fail fast. The preflight check in main.R should have caught a perf that
@@ -558,43 +731,6 @@ run_fims_benchmark <- function(ref_first = "main",
     status[["cpu"]] <- if (any(cpu_states == "failed")) 1L else 0L
   }
 
-  # The reference run: the stage once more per ref, on the optimized build, with
-  # no profiler attached. It is the source of every "what a user would see"
-  # number -- peak resident memory -- and of validation: the parameter values
-  # the model holds at the end of the rung, and from optimize up the fit.
-  # Profilers are for attribution; they distort both of these. Timing is not
-  # taken from it: that belongs to bench::mark(), which repeats.
-  #
-  # Peak RSS comes from the kernel's VmHWM on Linux, read inside the run. macOS
-  # has no /proc, so there the run goes under /usr/bin/time -l.
-  values_args <- character()
-  for (ref in refs) {
-    build <- builds[["profile"]][[ref]]
-    out <- file.path(output_dir, paste0("reference_", path_safe(ref), ".rds"))
-    time_out <- sub("[.]rds$", "_time.txt", out)
-    message("  reference run (unprofiled, optimized build): ", ref)
-    command <- if (identical(host, "Darwin")) "/usr/bin/time" else "Rscript"
-    args <- c(if (identical(host, "Darwin")) c("-l", "-o", shQuote(time_out), "Rscript"),
-              shQuote(file.path(repo_root, "R", "single_model_run.R")))
-    code <- run_logged(
-      command, args,
-      env = c(paste0("R_LIBS=", shQuote(build$lib)),
-              paste0("REPO_ROOT=", shQuote(repo_root)),
-              paste0("FIMS_STAGE=", stage),
-              paste0("FIMS_SIZE=", size),
-              paste0("FIMS_BACKEND=", backend),
-              paste0("TEARDOWN=", teardown),
-              paste0("VALUES_OUT=", shQuote(out))),
-      log = log_file)$status
-    # Fail fast: without this run there is no peak RSS and no validation.
-    if (code != 0L || !file.exists(out)) {
-      stop("Reference run for '", ref, "' exited with status ", code, ". See ",
-           log_file, call. = FALSE)
-    }
-    values_args <- c(values_args, shQuote(ref), shQuote(out))
-  }
-  status[["reference"]] <- 0L
-
   # Leaks: the stage once more per ref under a leak detector -- Valgrind
   # memcheck on Linux, leaks on macOS -- on the debug build so allocation stacks
   # resolve. Fail fast, like the other profilers: a detector that cannot run
@@ -610,12 +746,7 @@ run_fims_benchmark <- function(ref_first = "main",
         "python3",
         c(shQuote(file.path(repo_root, "scripts", "check_leaks.py")),
           "--ref", shQuote(ref), "--output", shQuote(out)),
-        env = c(paste0("R_LIBS=", shQuote(build$lib)),
-                paste0("REPO_ROOT=", shQuote(repo_root)),
-                paste0("FIMS_STAGE=", stage),
-                paste0("FIMS_SIZE=", size),
-                paste0("FIMS_BACKEND=", backend),
-                paste0("TEARDOWN=", teardown)),
+        env = model_env("debug", ref),
         log = log_file)$status
       # The checker exits 0 even when the detector could not run, and records
       # that in the JSON instead, so the status is read from there.
@@ -644,16 +775,12 @@ run_fims_benchmark <- function(ref_first = "main",
       out <- file.path(output_dir, paste0("tidy_bench_", path_safe(ref), ".tsv"))
       message("  back-to-back runs (", bench_iterations, " cycles each): ", ref)
       code <- run_logged(
-        "Rscript", shQuote(file.path(repo_root, "R", "run_lifecycle.R")),
-        env = c(paste0("R_LIBS=", shQuote(build$lib)),
-                paste0("REPO_ROOT=", shQuote(repo_root)),
-                paste0("FIMS_STAGE=", stage),
-                paste0("FIMS_SIZE=", size),
-                paste0("FIMS_BACKEND=", backend),
-                paste0("BENCH_ITERATIONS=", as.integer(bench_iterations)),
-                paste0("BENCH_REF=", shQuote(ref)),
-                paste0("BENCH_VERSION=", shQuote(build$version)),
-                paste0("BENCH_OUT=", shQuote(out))),
+        "Rscript", r_call("run_model_for_R_profiler"),
+        env = model_env("profile", ref,
+                          paste0("BENCH_ITERATIONS=", as.integer(bench_iterations)),
+                          paste0("BENCH_REF=", shQuote(ref)),
+                          paste0("BENCH_VERSION=", shQuote(build$version)),
+                          paste0("BENCH_OUT=", shQuote(out))),
         log = log_file)$status
       if (code != 0L || !file.exists(out)) {
         stop("Back-to-back runs for '", ref, "' exited with status ", code, ". See ",
@@ -729,90 +856,18 @@ run_fims_benchmark <- function(ref_first = "main",
 
   if (length(values_args)) {
     pairs <- matrix(gsub("'", "", values_args, fixed = TRUE), ncol = 2L, byrow = TRUE)
-    # macOS writes these to the /usr/bin/time -l file rather than the RDS.
-    time_metrics <- function(path) {
-      if (!file.exists(path)) return(list())
-      text <- readLines(path, warn = FALSE)
-      grab <- function(label) {
-        hit <- Filter(length, regmatches(text, regexec(
-          paste0("^\\s*([0-9]+)\\s+", label, "\\s*$"), text)))
-        if (length(hit)) as.numeric(hit[[1]][[2]]) else NULL
-      }
-      list(maximum_rss = grab("maximum resident set size"),
-           peak_footprint = grab("peak memory footprint"),
-           page_reclaims = grab("page reclaims"),
-           page_faults = grab("page faults"),
-           swaps = grab("swaps"))
-    }
     rows <- do.call(rbind, lapply(seq_len(nrow(pairs)), function(index) {
-      values <- readRDS(pairs[index, 2L])
-      from_time <- time_metrics(sub("[.]rds$", "_time.txt", pairs[index, 2L]))
-      recorded <- list(
-        maximum_rss = from_time$maximum_rss %||% values$maximum_rss,
-        stage_rss_added = values$stage_rss_added,
-        peak_footprint = from_time$peak_footprint,
-        page_reclaims = from_time$page_reclaims %||% values$page_reclaims,
-        page_faults = from_time$page_faults %||% values$page_faults,
-        swaps = from_time$swaps,
-        final_objective = values$final_objective,
-        initial_objective = values$initial_objective,
-        final_gradient_max = if (is.null(values$final_gradient)) NULL else max(abs(values$final_gradient)),
-        sd_fixed_max = if (is.null(values$sd_fixed)) NULL else max(values$sd_fixed),
-        iterations = values$iterations,
-        function_evaluations = values$function_evaluations,
-        gradient_evaluations = values$gradient_evaluations,
-        convergence = values$convergence,
-        n_fixed = values$n_fixed, n_random = values$n_random)
-      recorded <- recorded[!vapply(recorded, is.null, logical(1))]
-      # Per-parameter values, one row each. From optimize up these are the
-      # estimates and their standard errors, the numbers sdreport exists to
-      # produce. Below that they are the values the model holds at the end of
-      # the rung, named, so two builds can be compared before any fit.
-      indexed <- function(prefix, values) {
-        if (is.null(values) || !length(values)) return(NULL)
-        labels <- names(values) %||% rep("", length(values))
-        stats::setNames(as.list(unname(values)),
-                        paste0(prefix, seq_along(values), ":", labels))
-      }
-      recorded <- c(recorded,
-                    indexed("parameter:", values$parameters),
-                    indexed("estimate:", values$final_parameters),
-                    indexed("standard_error:", values$sd_fixed))
-      metric <- names(recorded)
-      # Whole numbers (bytes, counts) written out in full, not as 3.59e+08, so
-      # results.tsv reads cleanly in any tool; parameters keep full precision.
-      as_text <- function(x) {
-        x <- x[[1L]]
-        if (is.numeric(x) && is.finite(x) && x == round(x) && abs(x) < 1e15) {
-          formatC(x, format = "f", digits = 0L)
-        } else {
-          format(x, digits = 15L)
-        }
-      }
       ref <- pairs[index, 1L]
-      data.frame(
-        ref = ref, source = "reference",
-        fims_version = builds[["profile"]][[ref]]$version %||% "",
-        # Which entry points the build used, "xptr" or "native", where the
-        # merge only knows that "quadra" was asked for.
-        backend = values$backend %||% "",
-        metric = metric,
-        unit = ifelse(metric %in% c("maximum_rss", "stage_rss_added", "peak_footprint"), "bytes",
-               ifelse(grepl("objective|gradient|sd_|^parameter:|^estimate:|^standard_error:",
-                            metric), "value", "count")),
-        value = vapply(recorded, as_text, character(1)),
-        # Where the parameter values were read, so the report can say.
-        path = ifelse(startsWith(metric, "parameter:"), values$parameters_from %||% "",
-                      basename(pairs[index, 2L])),
-        stringsAsFactors = FALSE)
+      version <- builds[["profile"]][[ref]]$version
+      reference_rows(ref, pairs[index, 2L], if (is.null(version)) "" else version)
     }))
     tidy_rows(rows, "reference")
   }
 
   build_rows <- do.call(rbind, lapply(refs, function(ref) {
     do.call(rbind, lapply(build_types, function(build_type) {
-      profile <- builds[[build_type]][[ref]]$build_profile %||% ""
-      if (!nzchar(profile) || !file.exists(profile)) return(NULL)
+      profile <- builds[[build_type]][[ref]]$build_profile
+      if (is.null(profile) || !nzchar(profile) || !file.exists(profile)) return(NULL)
       text <- readLines(profile, warn = FALSE)
       # GNU time reports kilobytes; /usr/bin/time -l on macOS reports bytes.
       hit <- grep("Maximum resident set size", text, value = TRUE)

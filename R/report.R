@@ -389,6 +389,77 @@ if (nrow(estimates)) {
   }
 }
 
+# sdreport also returns standard errors for the random effects and for the
+# derived quantities, each as its own summary. Both are read here: the random
+# effects one by one, and the derived quantities grouped by name, since there is
+# one of those per year -- or per year and age -- and the question about them is
+# only whether the refs agree.
+sdreport_summary <- function(kind, run) {
+  hit <- measurements[measurements$run == run &
+                        startsWith(measurements$metric, paste0(kind, "_")), , drop = FALSE]
+  if (!nrow(hit)) return(NULL)
+  field <- sub("^[a-z]+_([a-z]+):.*$", "\\1", hit$metric)   # estimate or error
+  tag <- sub("^[a-z]+_[a-z]+:", "", hit$metric)             # <index>:<name>
+  tags <- unique(tag)
+  tags <- tags[order(as.integer(sub(":.*$", "", tags)))]
+  values <- function(which) {
+    out <- matrix(NA_real_, length(tags), length(refs), dimnames = list(tags, refs))
+    keep <- field == which
+    out[cbind(match(tag[keep], tags), match(hit$ref[keep], refs))] <- hit$number[keep]
+    out
+  }
+  list(name = sub("^[0-9]+:", "", tags), index = sub(":.*$", "", tags),
+       estimate = values("estimate"), error = values("error"))
+}
+
+number <- function(x, digits) if (is.na(x)) "\u2014" else format(x, digits = digits)
+
+for (run in runs$run) {
+  random <- sdreport_summary("random", run)
+  if (is.null(random)) next
+  columns <- paste(rep(refs, each = 2L), c("estimate", "SE"))
+  table <- c(paste0("| # | ", paste(columns, collapse = " | "), " |"),
+             paste0("|---:|", paste(rep("---:|", length(columns)), collapse = "")))
+  for (index in seq_along(random$name)) {
+    cells <- unlist(lapply(seq_along(refs), function(ref) {
+      c(number(random$estimate[index, ref], 10L), number(random$error[index, ref], 6L))
+    }))
+    table <- c(table, paste0("| ", random$index[[index]], " | ",
+                             paste(cells, collapse = " | "), " |"))
+  }
+  lines <- c(lines, section(
+    paste0("Random effects: ", run),
+    "The random effects and their standard errors, from `summary(sdreport, \"random\")`. These are conditional modes, so two builds that agree on the fixed effects and disagree here have found different random effect solutions at the same optimum.",
+    table))
+}
+
+for (run in runs$run) {
+  derived <- sdreport_summary("derived", run)
+  if (is.null(derived)) next
+  header <- c("Quantity", "Values", paste("Largest SE:", refs),
+              if (length(refs) > 1L) paste("Largest difference:", refs[-1L]))
+  table <- c(paste0("| ", paste(header, collapse = " | "), " |"),
+             paste0("|---|", paste(rep("---:|", length(header) - 1L), collapse = "")))
+  for (name in unique(derived$name)) {
+    rows <- which(derived$name == name)
+    worst <- function(x) if (all(is.na(x))) NA_real_ else max(abs(x), na.rm = TRUE)
+    errors <- vapply(seq_along(refs), function(ref) worst(derived$error[rows, ref]), numeric(1))
+    differences <- if (length(refs) > 1L) {
+      vapply(seq_along(refs)[-1L], function(ref) {
+        worst(derived$estimate[rows, ref] - derived$estimate[rows, 1L])
+      }, numeric(1))
+    }
+    cells <- c(vapply(errors, number, character(1), digits = 6L),
+               vapply(differences, number, character(1), digits = 4L))
+    table <- c(table, paste0("| ", name, " | ", length(rows), " | ",
+                             paste(cells, collapse = " | "), " |"))
+  }
+  lines <- c(lines, section(
+    paste0("Derived quantities: ", run),
+    "What `sdreport` returned for the quantities the model reports, grouped by name: how many values each holds, the largest standard error among them, and the largest difference between refs. Every value is in `results.tsv`.",
+    table))
+}
+
 # Back-to-back runs: the stage built, run and cleared repeatedly in one process.
 # Memory growth per cycle is the leak question; the rest is bench::mark().
 lifecycle <- c(heap_growth_per_cycle = "Memory growth per cycle",
@@ -422,7 +493,7 @@ if (any(measurements$source == "lifecycle")) {
                                                        measurements$metric == "cycles"], na.rm = TRUE))
   lines <- c(lines, section(
     "Back-to-back runs",
-    paste0("The stage built, run and cleared ", cycles, " times in one process, on the optimized build with no profiler. ",
+    paste0("The stage built and run ", cycles, " times in one process, on the optimized build with no profiler, tearing down each cycle the way the run does. ",
            "Memory growth is the slope of memory still in use after each cycle, leaving out the first two, which carry one-time costs: near zero means nothing accumulates, and a steady positive value is a leak of that size per model built. ",
            "Timing, R allocation and collections come from `bench::mark()` over the same cycle."),
     table))

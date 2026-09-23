@@ -105,12 +105,21 @@ there the addresses stay. The Codespaces image builds R from source; whether its
 
 ## Running a comparison
 
-Edit the settings at the top of `R/main.R` — the refs, the stage, the teardown
-mode, which profilers to run — then:
+Edit the settings at the top of `R/main.R` — the refs to compare, which runs to
+make (`only`), how many back-to-back cycles, whether to include the heavy
+rows — then:
 
 ```bash
 Rscript R/main.R
 ```
+
+Runs are named, and the name is the whole specification:
+`[quadra-]<stage>-<size>[-<teardown>]`, as in `initialize-normal`,
+`sdreport-large` or `initialize-normal-release`. Stage, size, teardown and
+backend are read from it, and so are the profilers. `labels` lists every run the
+comparison can make and `only` picks which of them to run this time; naming a
+teardown row also runs the row without the teardown, since a teardown number
+means nothing without one to compare it against.
 
 Or call it directly from a session that has never loaded FIMS:
 
@@ -128,8 +137,9 @@ derived quantities are already populated there.
 `backend` is the second axis, and both refs always run the one you ask for.
 `TMB` has both refs build a TMB tape and optimize it, so a difference is the
 interface and nothing else. `quadra` fits through Quadra instead, which never
-calls `TMB::MakeADFun` and so has no tape rung, making it meaningful only at
-`optimize` and `sdreport`.
+calls `TMB::MakeADFun` and so has no tape to stop at. Quadra therefore runs only
+at the `helper` stage, through `fit_fims()`, and a run named for Quadra at any
+other stage is refused rather than quietly run under TMB.
 
 There is deliberately no fallback. A ref whose build does not provide the
 Quadra API fails the run rather than quietly using TMB, because a comparison
@@ -152,23 +162,42 @@ here:
   `/usr/bin/time -l` on macOS, with page faults alongside.
 - **Validation.** The parameter values the model holds at the end of the rung,
   compared between refs: `initialize_fims()` parameters at `initialize`, and
-  `obj$env$parList()` at `tape` and `evaluate` (`get_fixed()` and `get_random()`
-  for Quadra, which has no TMB object). From `optimize` up, the fit and its estimates, with standard
-  errors at `sdreport`.
+  `obj$env$parList()` at `tape` and `evaluate`. From `optimize` up, the fit and
+  its estimates, with standard errors at `sdreport`. A Quadra run records its
+  estimates through `get_fixed()` and `get_random()`, since it has no TMB object
+  to read them from. At `sdreport` the normal size also records the random
+  effects and the derived quantities, each with its standard error; the large
+  size does not, since both grow with the number of years and two builds that
+  agree at 30 years agree at 120.
 
 Timing is deliberately not taken from it: a single run is noisy, and timing
 belongs to `bench::mark()`, which repeats. A reference run that fails stops the
 benchmark, since without it there is no peak RSS and no validation.
 
-Runs at the normal size without teardown also get **back-to-back runs**
-(`R/run_lifecycle.R`): the stage built, run and cleared `bench_iterations` times
-in one process, then the same again under `bench::mark()`. After each cycle it
-reads the memory still in use, R and C++ together, from glibc's own count, after
-three garbage collections. Flat after the first couple of cycles means nothing
-accumulates; a steady rise is a leak, and the report gives its size per model
-built. Resident memory cannot show this, because freed memory stays inside the
-process. The memory half is Linux only; `bench::mark()` supplies timing, R
-allocation and garbage collections everywhere.
+Every run at the normal size also gets **back-to-back runs**
+(`run_model_for_R_profiler()` in `R/run_model_for_profilers.R`): the stage built,
+run and torn down `bench_iterations` times in one process, then the same again
+under `bench::mark()`. After each cycle it reads the memory still in use, R and
+C++ together, from glibc's own count, after three garbage collections. Flat
+after the first couple of cycles means nothing accumulates; a steady rise is a
+leak, and the report gives its size per model built. Resident memory cannot show
+this, because freed memory stays inside the process.
+
+The cycle uses the run's own teardown, and every cycle starts by clearing
+regardless, since `setup_fims_model()` does. So the teardown decides whether a
+model is alive when the memory is read: the growth per cycle is the leak, and
+the level is what the teardown did or did not return. `none` against `clear`
+gives the size of a live model, and `release` says whether dropping the R
+handles alone returned it. The memory half is Linux only; `bench::mark()`
+supplies timing, R allocation and garbage collections everywhere.
+
+Which profilers a run gets follows from its name. Every run is measured for
+memory. A run without a teardown also gets the CPU profile, which a teardown row
+skips because it would repeat its partner row and say nothing about memory
+coming back. Leak checks and back-to-back runs are limited to the normal size,
+where every row gets both: memcheck is far slower than Massif, many cycles of
+the 120-year model would take far too long, and both leaks and accumulation show
+up at either size.
 
 ## What a run produces
 
@@ -204,7 +233,7 @@ R/main.R                    settings and preflight checks
   └─ run_fims_benchmark()   R/run_benchmark.R: setup, orchestration, reporting
        ├─ install           one library per ref per build type
        ├─ profile           scripts/memory.sh, scripts/performance.sh
-       │                      └─ R/single_model_run.R
+       │                      └─ R/run_model_for_profilers.R
        │                           setup_fims_inputs()
        │                           wait for the recorder to attach
        │                           setup_fims_model()
@@ -234,11 +263,13 @@ Valgrind instruments from the first instruction and cannot do this, which is
 why every ref also gets an inputs-only baseline run: the report subtracts it to
 report what the stage itself cost.
 
-The shell scripts take one measurement each and can be run by hand:
+The shell scripts take one measurement each and can be run by hand. They decide
+only the profiler; the model settings reach `run_model_for_cpp_profiler()` as
+environment variables, which is why they are set on the command line here:
 
 ```bash
-scripts/memory.sh --tool massif --lib outputs/.lib-cache/debug/main \
-  --stage initialize --out /tmp/one.out
+R_LIBS=outputs/.lib-cache/debug/main FIMS_STAGE=initialize FIMS_SIZE=normal \
+  scripts/memory.sh --tool massif --out /tmp/one.out
 ```
 
 ## Notes
@@ -261,12 +292,22 @@ scripts/memory.sh --tool massif --lib outputs/.lib-cache/debug/main \
 ```bash
 PYTHONPATH=scripts python3 -m unittest discover -s scripts -p "test_*.py"
 Rscript scripts/test_multi_refs.R
+Rscript scripts/test_reference_rows.R
+Rscript scripts/test_model_functions.R
 ```
 
-`test_parsers.py` covers the Massif and perf parsing the benchmark depends on,
-`test_check_leaks.py` covers the leak parser, `test_multi_reports.py` covers ref
-resolution and the hand-run `--output` reports, and `test_multi_refs.R` covers
-`resolve_refs()`. None of them need FIMS installed.
+| Test | Covers |
+|---|---|
+| `test_parsers.py` | The Massif and perf parsing the benchmark depends on |
+| `test_check_leaks.py` | The leak log parser |
+| `test_report.py` | `R/report.R`: each section appears when its measurement is there and not otherwise |
+| `test_reference_rows.R` | The reference run's values turned into rows, in the shape `setup_fims_model()` records, rendered through to the report |
+| `test_model_functions.R` | `setup_fims_model()` and both functions in `R/run_model_for_profilers.R`, including detecting a leak |
+| `test_multi_refs.R`, `test_multi_reports.py` | Ref handling, and the hand-run `--output` reports |
+
+None of them need FIMS installed. `test_model_functions.R` installs a stand-in,
+`scripts/stub_fims`, into a temporary library; it covers the initialize rung,
+since the rungs above it need TMB's compiled tape.
 
 ## To do
 

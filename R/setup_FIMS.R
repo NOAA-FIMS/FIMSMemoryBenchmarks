@@ -45,21 +45,19 @@ expand_fims_modules <- function(parameters, n_fleets, n_surveys) {
 setup_fims_inputs <- function(size = c("normal", "large")) {
   size <- match.arg(size)
 
+
+  # "normal" is the current number of years of data_big (30 years).
+  # Longer models are built by recycling its years, so the model grows
+  # in dimension while values repeat across added years
   if (size == "normal") {
-    n_years <- 30
+    data_4_model <- data_big |> FIMS::FIMSFrame()
+    message(c("--> Inputs: ", size, " (30 years)"))
   } else {
-    n_years <- 120
+    data_4_model <- data_big |> FIMS::FIMSFrame() |> 
+      expand_fims_years(n_years = 120) |>
+      FIMSFrame()
+    message(c("--> Inputs: ", size, " (120 years)"))
   }
-
-  data("data_big")
-  data_big <- FIMS::FIMSFrame(data_big)
-
-  # "normal" is the current number of years of data_big (30 years). Longer models are built by
-  # recycling its years, so the model grows in dimension while values repeat across added years
-
-  benchmark_data <- if (n_years > 30L) expand_fims_years(data_big, n_years) else data_big
-  message(sprintf("--> Inputs: %s (%d years)", size, n_years))
-  data_4_model <- FIMS::FIMSFrame(benchmark_data)
 
   parameters_4_model <- FIMS::setup_default_parameters(data = data_4_model) |>
     dplyr::rows_update(
@@ -67,14 +65,7 @@ setup_fims_inputs <- function(size = c("normal", "large")) {
         fleet = "fleet1",
         label = "log_Fmort",
         timing = seq(FIMS::get_n_years(data_4_model)),
-        value = log(rep(c(
-          0.009459165, 0.027288858, 0.045063639, 0.061017825, 0.048600752,
-          0.087420554, 0.088447204, 0.186607929, 0.109008958, 0.132704335,
-          0.150615473, 0.161242955, 0.116640187, 0.169346119, 0.180191913,
-          0.161240483, 0.314573212, 0.257247574, 0.254887252, 0.251462108,
-          0.349101406, 0.254107720, 0.418478117, 0.345721184, 0.343685540,
-          0.314171227, 0.308026829, 0.431745298, 0.328030899, 0.499675368
-        ), length.out = FIMS::get_n_years(data_4_model)))
+        value = rep(0, FIMS::get_n_years(data_4_model))
       ),
       by = c("fleet", "label", "timing")
     ) |>
@@ -82,28 +73,28 @@ setup_fims_inputs <- function(size = c("normal", "large")) {
       tibble::tibble(
         fleet = "survey1",
         label = c("inflection_point", "slope", "log_q"),
-        value = c(1.5, 2, log(3.315143e-07))
+        value = c(1, 1, -10)
       ),
       by = c("fleet", "label")
     ) |>
     dplyr::rows_update(
       tibble::tibble(
+        label = "log_rzero",
+        value = 10
+      ),
+      by = c("label")
+    ) |>
+    dplyr::rows_update(
+      tibble::tibble(
         label = "log_devs",
         timing = 2:FIMS::get_n_years(data_4_model),
-        value = rep(c(
-          0.43787763, -0.13299042, -0.43251973, 0.64861200, 0.50640852,
-          -0.06958319, 0.30246260, -0.08257384, 0.20740372, 0.15289604,
-          -0.21709207, -0.13320626, 0.11225374, -0.10650836, 0.26877132,
-          0.24094126, -0.54480751, -0.23680557, -0.58483386, 0.30122785,
-          0.21930545, -0.22281699, -0.51358369, 0.15740234, -0.53988240,
-          -0.19556523, 0.20094360, 0.37248740, -0.07163145
-        ), length.out = FIMS::get_n_years(data_4_model) - 1L)
+        value = rep(0, FIMS::get_n_years(data_4_model) - 1L)
       ),
       by = c("label", "timing")
     ) |>
     dplyr::rows_update(
       tibble::tibble(
-        module_name = "Recruitment", label = "log_sd", value = 0.4
+        module_name = "Recruitment", label = "log_sd", value = 0
       ),
       by = c("module_name", "label")
     ) |>
@@ -111,7 +102,7 @@ setup_fims_inputs <- function(size = c("normal", "large")) {
       tibble::tibble(
         module_name = "Maturity",
         label = c("inflection_point", "slope"),
-        value = c(2.25, 3)
+        value = c(1,1)
       ),
       by = c("module_name", "label")
     ) |>
@@ -119,16 +110,12 @@ setup_fims_inputs <- function(size = c("normal", "large")) {
       tibble::tibble(
         label = "log_init_naa",
         age = seq(FIMS::get_n_ages(data_4_model)),
-        value = c(
-          13.80944, 13.60690, 13.40217, 13.19525, 12.98692, 12.77791,
-          12.56862, 12.35922, 12.14979, 11.94034, 11.73088, 13.18755
-        )
+        value = rep(0,12)
       ),
       by = c("label", "age")
     )
 
-  list(data = data_4_model, parameters = parameters_4_model,
-       size = size, n_years = n_years)
+  list(data = data_4_model, parameters = parameters_4_model)
 }
 
 
@@ -183,18 +170,53 @@ setup_fims_model <- function(input,
   mark <- function(nm) marks[[nm]] <<- bench::hires_time()
   result <- list(backend = backend)
 
-  if (stage == "helper") {
-    if (backend == "quadra") {
-      check_for_quadra()
+  # Quadra runs through fit_fims() and nothing else, so it has no rung below the
+  # helper to stop at.
+  if (backend == "quadra") {
+    if (stage != "helper") {
+      stop("The quadra backend runs only at the \"helper\" stage, not '", stage, "'.",
+           call. = FALSE)
     }
+    check_for_quadra()
+  }
+
+  if (stage == "helper") {
     FIMS::clear()
     mark("clear_entry")
     init_parms <- FIMS::initialize_fims(
-      result$parameters, data = result$data
+      input$parameters, data = input$data
     )
+    mark("initialize")
     fit <- FIMS::fit_fims(init_parms, optimize = TRUE,
                           backend = backend)
-    result = fit
+    mark("sdreport")
+    if (record) {
+      result$initial_parameters <- init_parms$parameters
+      result$n_fixed <- init_parms$parameters$p |> length()
+      result$n_random <- init_parms$parameters$re |> length()
+      result$n_par <- init_parms$parameters |> unlist() |> length()
+      # Quadra builds no TMB object, so the estimates come back through the
+      # FIMS interface and there is no gradient function to ask.
+      if (backend == "quadra") {
+        result$final_parameters <- as.numeric(c(FIMS::get_fixed(), FIMS::get_random()))
+      } else {
+        result$final_parameters <- as.numeric(fit@obj$env$last.par.best)
+        result$final_gradient <- as.numeric(fit@obj$gr(fit@opt$par))
+      }
+      result$final_objective <- as.numeric(fit@opt$objective)
+      result$convergence <- fit@opt$convergence
+      result$message <- fit@opt$message
+      result$iterations <- fit@opt$iterations
+      result$function_evaluations <- unname(fit@opt$evaluations[["function"]])
+      result$gradient_evaluations <- unname(fit@opt$evaluations[["gradient"]])
+      # A fit that stopped before sdreport leaves the slot empty. Everything
+      # above still gets recorded, so the run reports a fit without errors.
+      if (length(fit@sdreport)) {
+        result$sdr_fixed <- summary(fit@sdreport, "fixed")
+        result$random <- summary(fit@sdreport, "random")
+        result$report <- summary(fit@sdreport, "report")
+      }
+    }
 
   } else {
     ladder <- c("initialize", "tape", "evaluate",
@@ -261,7 +283,7 @@ setup_fims_model <- function(input,
       if (record) { 
         result$final_parameters <- as.numeric(obj$env$last.par.best)
         result$final_objective <- as.numeric(opt$objective)
-        result$final_gradient <- as.numeric(gr(opt$par))
+        result$final_gradient <- as.numeric(obj$gr(opt$par))
         result$convergence <- opt$convergence
         result$message <- opt$message
         result$iterations <- opt$iterations
@@ -279,14 +301,17 @@ setup_fims_model <- function(input,
         result$report <- summary(sdr, "report")
       }
     }
-
-
-    switch(teardown,
-      clear   = { FIMS::clear(); mark("teardown") },
-      release = { obj <- NULL; init_parms <- NULL; gc(); mark("teardown") },
-      none    = invisible(NULL)
-    )
   }
+
+  # Teardown is orthogonal to the stage, so it runs after either path, the
+  # helper included. "release" drops the R handles and collects twice: the first
+  # collection runs the finalizers of any external pointers, and the memory they
+  # hand back only shows up in the second.
+  switch(teardown,
+    clear   = { FIMS::clear(); mark("teardown") },
+    release = { obj <- NULL; init_parms <- NULL; gc(); gc(); mark("teardown") },
+    none    = invisible(NULL)
+  )
 
   structure(
     list(result = result,
@@ -298,39 +323,6 @@ setup_fims_model <- function(input,
   )
 }
 
-
-
-# ---------------------------------------------------------------------------
-# Equivalence check for bench::mark(check = fims_check)
-# ---------------------------------------------------------------------------
-
-#' Do two runs of the same stage agree?
-#'
-#' Passed to bench::mark(check = fims_check), which compares one iteration with
-#' the next. Only the fields the rung actually produced are compared: a field
-#' missing from both is agreement, and missing from one is not. The comparison
-#' is numeric, so it works whether a field is a list (initialize_fims()
-#' parameters), a named vector (parList()), or a matrix (an sdreport summary).
-fims_check <- function(a, b) {
-  fa <- a$result
-  fb <- b$result
-  same <- function(name, tolerance) {
-    x <- fa[[name]]
-    y <- fb[[name]]
-    if (is.null(x) && is.null(y)) return(TRUE)
-    if (is.null(x) || is.null(y)) return(FALSE)
-    isTRUE(all.equal(unname(unlist(x)), unname(unlist(y)), tolerance = tolerance))
-  }
-  identical(fa$backend, fb$backend) &&
-    same("n_par", 0) && same("n_fixed", 0) && same("n_random", 0) &&
-    same("initial_parameters", 1e-10) &&
-    same("initial_objective", 1e-8) &&
-    same("final_objective", 1e-8) &&
-    same("final_parameters", 1e-6) &&
-    same("final_gradient", 1e-6) &&
-    same("sdr_fixed", 1e-6)
-}
-
 # ---------------------------------------------------------------------------
 # Installation
 # ---------------------------------------------------------------------------
@@ -340,7 +332,7 @@ fims_check <- function(a, b) {
 #' The compiler flags come from the environment, not from this function:
 #' run_fims_benchmark() writes a Makevars per build type and points
 #' R_MAKEVARS_USER at it, so the same call produces the -O1 build for Valgrind
-#' and the -O2 build for perf. R_LIBS_USER decides which library it lands in, so
+#' and the -O2 build for perf. R_LIBS decides which library it lands in, so
 #' both builds of both refs can coexist.
 #'
 #' `--preclean` runs `make clean` in the package source before building. It is a
