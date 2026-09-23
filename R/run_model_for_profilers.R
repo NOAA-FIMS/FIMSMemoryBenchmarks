@@ -244,8 +244,36 @@ run_model_for_R_profiler <- function(stage = Sys.getenv("FIMS_STAGE", "initializ
   # The first two cycles carry one-time costs -- modules loaded and caches
   # filled on first use -- so the slope is taken over the cycles after them.
   settled <- in_use[-(1:2)]
-  growth <- if (sum(is.finite(settled)) >= 3L) {
-    unname(stats::coef(stats::lm(settled ~ seq_along(settled)))[[2]])
+  fit <- if (sum(is.finite(settled)) >= 3L) {
+    stats::lm(settled ~ seq_along(settled))
+  } else {
+    NULL
+  }
+  growth <- if (is.null(fit)) NA_real_ else unname(stats::coef(fit)[[2]])
+
+  # A slope on its own cannot be read. Fitting a line to a flat series returns a
+  # small non-zero number, which then renders as a large percentage against
+  # another branch's equally meaningless small number. These three say whether
+  # the slope describes the data at all:
+  #
+  #   spread    max - min across the settled cycles. Near zero means the series
+  #             is flat, and no slope taken from it means anything.
+  #   r_squared how much of the variation the straight line accounts for.
+  #   endpoint  (last - first) / cycles: the same quantity the slope claims to
+  #             measure, without fitting. Where the two disagree by orders of
+  #             magnitude, a straight line is the wrong description.
+  spread <- if (sum(is.finite(settled)) >= 2L) {
+    diff(range(settled, na.rm = TRUE))
+  } else {
+    NA_real_
+  }
+  r_squared <- if (is.null(fit) || !is.finite(spread) || spread == 0) {
+    NA_real_
+  } else {
+    summary(fit)[["r.squared"]]
+  }
+  endpoint_growth <- if (sum(is.finite(settled)) >= 2L) {
+    (settled[[length(settled)]] - settled[[1L]]) / (length(settled) - 1L)
   } else {
     NA_real_
   }
@@ -276,6 +304,9 @@ run_model_for_R_profiler <- function(stage = Sys.getenv("FIMS_STAGE", "initializ
     row("cycles", "count", iterations),
     if (!is.null(heap_in_use)) rbind(
       row("heap_growth_per_cycle", "bytes", growth),
+      row("heap_growth_spread", "bytes", spread),
+      row("heap_growth_r_squared", "fraction", r_squared),
+      row("heap_growth_endpoint", "bytes", endpoint_growth),
       row("heap_after_first_cycle", "bytes", in_use[[1L]]),
       row("heap_after_last_cycle", "bytes", in_use[[iterations]]),
       do.call(rbind, lapply(seq_len(iterations), function(i) {

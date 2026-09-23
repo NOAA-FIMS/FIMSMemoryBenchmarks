@@ -29,6 +29,29 @@ def parse_summary(text, host):
     return values if len(values) == 5 else None
 
 
+def parse_heap_usage(text):
+    """Total allocations over the whole run, from Valgrind's exit summary.
+
+    Separate from the leak counts above: those are what was still held at exit,
+    this is how many times the run went to the allocator at all. It is the
+    quantity the XPtr design notes predict a reduction in, and memcheck already
+    prints it, so nothing extra has to be measured to report it.
+
+    Returns None on a Darwin log, or any log without the summary line.
+    """
+    match = re.search(
+        r'total heap usage: ([\d,]+) allocs, ([\d,]+) frees, ([\d,]+) bytes allocated',
+        text)
+    if not match:
+        return None
+    allocs, frees, allocated = (int(g.replace(',', '')) for g in match.groups())
+    return {
+        'total_allocations': allocs,
+        'total_frees': frees,
+        'total_bytes_allocated': allocated,
+    }
+
+
 def allocation_origin(frames):
     """Use the nearest recognizable allocation caller, not a distant ancestor."""
     for frame in frames:
@@ -107,7 +130,8 @@ def run(ref, output):
     log = output.with_suffix('.log')
     marker = output.with_suffix('.completed')
     marker.unlink(missing_ok=True)
-    result = {'ref': ref, 'tool': tool, 'status': 'disabled', 'metrics': None, 'log': log.name}
+    result = {'ref': ref, 'tool': tool, 'status': 'disabled', 'metrics': None,
+              'heap_usage': None, 'log': log.name}
     if os.getenv('LEAK_CHECK', '1') != '1':
         pass
     elif not shutil.which(tool):
@@ -140,6 +164,7 @@ def run(ref, output):
             metrics = parse_summary(log.read_text(errors='replace'), host)
             if marker.exists() and metrics is not None and completed.returncode in ([0, 1] if host == 'Darwin' else [0, 99]):
                 result['metrics'] = metrics
+                result['heap_usage'] = parse_heap_usage(log.read_text(errors='replace'))
                 result['leak_records'] = parse_records(log.read_text(errors='replace'), host)
                 leaked = metrics.get('leaked_bytes', 0) + sum(metrics.get(k, 0) for k in ['definitely lost', 'indirectly lost', 'possibly lost'])
                 result['status'] = 'leaks detected' if leaked else 'no leaks detected'
@@ -161,6 +186,14 @@ def tidy(paths, tidy_out):
         for metric, value in (data["metrics"] or {}).items():
             rows.append({"ref": data["ref"], "source": "leaks", "metric": metric,
                          "unit": "bytes", "value": value, "path": path.name})
+        # Allocation totals for the whole run, which are counts rather than
+        # bytes except for the last one.
+        heap_units = {"total_allocations": "count", "total_frees": "count",
+                      "total_bytes_allocated": "bytes"}
+        for metric, value in (data.get("heap_usage") or {}).items():
+            rows.append({"ref": data["ref"], "source": "leaks", "metric": metric,
+                         "unit": heap_units.get(metric, "count"), "value": value,
+                         "path": path.name})
     write_rows(tidy_out, rows)
 
 

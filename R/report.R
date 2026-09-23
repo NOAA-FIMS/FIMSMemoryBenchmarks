@@ -460,6 +460,14 @@ for (run in runs$run) {
     table))
 }
 
+# What counts as a flat series, for the growth slope. A run that moves less than
+# this in total across its settled cycles, or whose movement a straight line
+# barely explains, is reported as no growth rather than as a slope: fitting a
+# line to a constant returns a small non-zero number that then renders as a
+# large percentage against another branch's equally meaningless one.
+flat_spread_bytes <- 256 * 1024
+flat_r_squared <- 0.5
+
 # Back-to-back runs: the stage built, run and cleared repeatedly in one process.
 # Memory growth per cycle is the leak question; the rest is bench::mark().
 lifecycle <- c(heap_growth_per_cycle = "Memory growth per cycle",
@@ -478,12 +486,31 @@ if (any(measurements$source == "lifecycle")) {
       if (all(is.na(row))) next
       is_bytes <- metric %in% c("heap_growth_per_cycle", "heap_after_first_cycle",
                                 "heap_after_last_cycle", "mem_alloc")
-      shown <- vapply(row, function(x) {
-        if (is.na(x)) "\u2014" else if (is_bytes) bytes(x)
+      # A slope fitted to a flat series is not a measurement. Where the settled
+      # cycles barely move, or a straight line accounts for little of what
+      # movement there is, the honest report is that no growth was detected.
+      flat <- rep(FALSE, length(refs))
+      if (metric == "heap_growth_per_cycle") {
+        flat <- vapply(refs, function(ref) {
+          spread <- number_of("lifecycle", "heap_growth_spread", run, ref)
+          r2 <- number_of("lifecycle", "heap_growth_r_squared", run, ref)
+          isTRUE(is.finite(spread) && spread < flat_spread_bytes) ||
+            isTRUE(is.finite(r2) && r2 < flat_r_squared)
+        }, logical(1))
+      }
+      shown <- vapply(seq_along(row), function(i) {
+        x <- row[[i]]
+        if (is.na(x)) "\u2014"
+        else if (flat[[i]]) "none detected"
+        else if (is_bytes) bytes(x)
         else if (metric == "median_time") seconds(x) else format(x, digits = 3L)
       }, character(1))
-      changes <- if (length(refs) > 1L) vapply(row[-1L], function(x) {
-        if (is_bytes) change_bytes(row[[1L]], x) else change_ratio(row[[1L]], x)
+      changes <- if (length(refs) > 1L) vapply(seq_along(row)[-1L], function(i) {
+        # Comparing against a baseline that itself showed no growth turns
+        # allocator noise into a percentage. Say so instead.
+        if (flat[[1L]] || flat[[i]]) "\u2014"
+        else if (is_bytes) change_bytes(row[[1L]], row[[i]])
+        else change_ratio(row[[1L]], row[[i]])
       }, character(1))
       table <- c(table, paste0("| ", run, " | ", lifecycle[[metric]], " | ",
                                paste(c(shown, changes), collapse = " | "), " |"))
@@ -494,7 +521,10 @@ if (any(measurements$source == "lifecycle")) {
   lines <- c(lines, section(
     "Back-to-back runs",
     paste0("The stage built and run ", cycles, " times in one process, on the optimized build with no profiler, tearing down each cycle the way the run does. ",
-           "Memory growth is the slope of memory still in use after each cycle, leaving out the first two, which carry one-time costs: near zero means nothing accumulates, and a steady positive value is a leak of that size per model built. ",
+           "Memory growth is the slope of memory still in use after each cycle, leaving out the first two, which carry one-time costs. A steady positive value is a leak of that size per model built. ",
+           "\"none detected\" means the settled cycles moved less than ", bytes(flat_spread_bytes),
+           " in total, or that a straight line accounted for less than ", format(flat_r_squared),
+           " of what movement there was: a slope taken from such a series describes nothing, and a percentage against it less still. ",
            "Timing, R allocation and collections come from `bench::mark()` over the same cycle."),
     table))
 }
@@ -658,6 +688,45 @@ if (nrow(leaks)) {
     "The stage once more under a leak detector, on the debug build so stacks resolve. Covers the whole R process, dependencies included. Definitely, indirectly and possibly lost memory are leaks; still reachable is memory R held at exit on purpose and is not. Read the allocation stacks in the raw log before attributing a leak to FIMS.",
     table))
 }
+
+  # Allocation totals, which memcheck already prints at exit. Separate from the
+  # leak table above: that is what was still held when the process ended, this
+  # is how many times the run went to the allocator at all.
+  allocation <- c(total_allocations = "Allocations",
+                  total_frees = "Frees",
+                  total_bytes_allocated = "Bytes allocated")
+  if (nrow(leaks) && any(leaks$metric %in% names(allocation))) {
+    header <- c("Run", "Metric", refs, if (length(refs) > 1L) paste("Change:", refs[-1L]))
+    table <- c(paste0("| ", paste(header, collapse = " | "), " |"),
+               paste0("|---|---|", paste(rep("---:|", length(header) - 2L), collapse = "")))
+    for (run in runs$run) {
+      for (metric in names(allocation)) {
+        row <- vapply(refs, function(ref) {
+          hit <- leaks[leaks$run == run & leaks$ref == ref & leaks$metric == metric, , drop = FALSE]
+          if (nrow(hit)) hit$number[[1L]] else NA_real_
+        }, numeric(1))
+        if (all(is.na(row))) next
+        is_bytes <- identical(metric, "total_bytes_allocated")
+        shown <- vapply(row, function(x) {
+          if (is.na(x)) "\u2014" else if (is_bytes) bytes(x)
+          else format(x, big.mark = ",", scientific = FALSE, trim = TRUE)
+        }, character(1))
+        changes <- if (length(refs) > 1L) vapply(row[-1L], function(x) {
+          if (is_bytes) change_bytes(row[[1L]], x) else change_ratio(row[[1L]], x)
+        }, character(1))
+        table <- c(table, paste0("| ", run, " | ", allocation[[metric]], " | ",
+                                 paste(c(shown, changes), collapse = " | "), " |"))
+      }
+    }
+    lines <- c(lines, section(
+      "Allocation totals",
+      paste0("Every call to the allocator over the whole run, from the leak detector's exit summary, ",
+             "so it covers R and its packages as well as the stage. Fewer allocations is what the ",
+             "interface changes set out to achieve. It is a count rather than a footprint: it does ",
+             "not say memory was saved, and the cost of a single call is too small to account for a ",
+             "large change in run time on its own."),
+      table))
+  }
 
 lines <- c(lines, section(
   "Build cost",
