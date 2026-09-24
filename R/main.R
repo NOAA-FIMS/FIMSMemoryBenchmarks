@@ -20,9 +20,9 @@ ref_first <- "8bdd020" # baseline
 ref_compare <- c("update-R-with-XPtr-interface", "remove-direct-rcpp-main")
 
 # Quadra is a special case and comparisons require a FIMS branch with quadra
-# implemented. Setting the two refs bellow to `NULL` will skip the four "quadra-"
-# rows. Both branches must implement Quadra as the backend, a build that does not
-# have it will fail the run.
+# implemented. Setting the two refs bellow to `NULL` will skip the four
+# `Quadra` rows. Both branches must implement Quadra as the backend, a build
+# that does not have it will fail the run.
 ref_first_quadra <- NULL # baseline; NULL skips the rows
 ref_compare_quadra <- NULL
 
@@ -40,7 +40,13 @@ run_heavy <- TRUE
 only <- c("initialize-normal", "initialize-large-clear")
 
 repo_root <- normalizePath(
-  if (requireNamespace("here", quietly = TRUE)) here::here() else getwd(),
+  {
+    if (requireNamespace("here", quietly = TRUE)) {
+      here::here()
+    } else {
+      getwd()
+    }
+  },
   mustWork = TRUE
 )
 source(file.path(repo_root, "R", "run_benchmark.R"))
@@ -82,27 +88,48 @@ labels <- c(
 
 parse_label <- function(label) {
   word <- strsplit(label, "-", fixed = TRUE)[[1]]
-  backend <- if (identical(word[[1]], "quadra")) "quadra" else "TMB"
-  if (identical(backend, "quadra")) word <- word[-1]
+  backend <- if (identical(word[[1]], "quadra")) {
+    "quadra"
+  } else {
+    "TMB"
+  }
+  if (identical(backend, "quadra")) {
+    word <- word[-1]
+  }
   stage <- word[[1]]
-  size <- if (length(word) > 1L) word[[2]] else ""
-  teardown <- if (length(word) > 2L) word[[3]] else "none"
+  size <- if (length(word) > 1L) {
+    word[[2]]
+  } else {
+    ""
+  }
+  teardown <- if (length(word) > 2L) {
+    word[[3]]
+  } else {
+    "none"
+  }
   wrong <- c(
-    if (length(word) > 3L) "too many parts",
+    if (length(word) > 3L) {
+      "too many parts"
+    },
     if (!stage %in% c(
       "initialize", "tape", "evaluate", "optimize",
       "sdreport", "helper"
     )) {
       paste0("unknown stage '", stage, "'")
     },
-    if (!size %in% c("normal", "large")) paste0("unknown size '", size, "'"),
-    if (!teardown %in% c("none", "clear", "release")) paste0("unknown teardown '", teardown, "'"),
+    if (!size %in% c("normal", "large")) {
+      paste0("unknown size '", size, "'")
+    },
+    if (!teardown %in% c("none", "clear", "release")) {
+      paste0("unknown teardown '", teardown, "'")
+    },
     if (identical(backend, "quadra") && !identical(stage, "helper")) {
       "quadra runs only at the helper stage"
     }
   )
   if (length(wrong)) {
-    stop("Cannot read the run '", label, "': ", paste(wrong, collapse = "; "),
+    stop(
+      "Cannot read the run '", label, "': ", paste(wrong, collapse = "; "),
       ". Expected [quadra-]<stage>-<size>[-<teardown>].",
       call. = FALSE
     )
@@ -164,13 +191,18 @@ if (!is.null(only)) {
   if (length(partners)) {
     message(
       "Also running ", paste(partners, collapse = ", "),
-      ": teardown runs are compared with the same stage and size without teardown."
+      ": teardown runs are compared with the same stage and size without ",
+      " teardown."
     )
   }
   runs <- runs[runs$label %in% c(only, partners), , drop = FALSE]
 }
-if (!isTRUE(run_heavy)) runs <- runs[!runs$heavy, , drop = FALSE]
-if (!nrow(runs)) stop("No runs selected.", call. = FALSE)
+if (!isTRUE(run_heavy)) {
+  runs <- runs[!runs$heavy, , drop = FALSE]
+}
+if (!nrow(runs)) {
+  stop("No runs selected.", call. = FALSE)
+}
 
 # ---- preflight --------------------------------------------------------------
 # Checked once, before anything is compiled.
@@ -192,11 +224,16 @@ host <- Sys.info()[["sysname"]]
 if (any(grepl("memory", runs$profiles))) {
   if (identical(host, "Darwin")) {
     if (!nzchar(Sys.which("xctrace"))) {
-      warning("xctrace was not found; allocation traces will be skipped.", call. = FALSE)
+      warning(
+        "xctrace was not found; allocation traces will be skipped.",
+        call. = FALSE
+      )
     }
   } else {
     massif <- test_valgrind_works()
-    if (!isTRUE(massif)) stop("Memory profiling is not usable here: ", massif, call. = FALSE)
+    if (!isTRUE(massif)) {
+      stop("Memory profiling is not usable here: ", massif, call. = FALSE)
+    }
     message("Valgrind can run Massif here.")
   }
 }
@@ -225,10 +262,15 @@ if (any(grepl("cpu", runs$profiles))) {
 }
 
 if (any(grepl("leaks", runs$profiles))) {
-  detector <- if (identical(host, "Darwin")) "leaks" else "valgrind"
+  detector <- if (identical(host, "Darwin")) {
+    "leaks"
+  } else {
+    "valgrind"
+  }
   if (!nzchar(Sys.which(detector))) {
     # Fail fast: without the detector every leak check fails the same way.
-    stop(detector, " is required for leak checks on ", host, ". ", FIX_PROFILERS,
+    stop(
+      detector, " is required for leak checks on ", host, ". ", FIX_PROFILERS,
       call. = FALSE
     )
   }
@@ -267,7 +309,9 @@ for (index in seq_len(nrow(runs))) {
       bench_iterations = bench_iterations,
       label = row$label
     ),
-    error = function(e) structure(conditionMessage(e), class = "benchmark_failure")
+    error = function(e) {
+      structure(conditionMessage(e), class = "benchmark_failure")
+    }
   )
 
   results$minutes[index] <- round(
@@ -292,7 +336,8 @@ index_file <- file.path(
   repo_root, "outputs",
   paste0(format(Sys.time(), "%Y%m%d"), "_analysis_index.tsv")
 )
-utils::write.table(results, index_file, sep = "\t", row.names = FALSE, quote = FALSE)
+utils::write.table(results, index_file, sep = "\t", row.names = FALSE,
+                   quote = FALSE)
 
 report_file <- file.path(
   repo_root, "outputs",
