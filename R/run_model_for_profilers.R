@@ -20,7 +20,8 @@
 # file and calls one of them:
 #
 #   Rscript -e "source(file.path(Sys.getenv('REPO_ROOT'), 'R',
-#                                'run_model_for_profilers.R')); run_model_for_cpp_profiler()"
+#                                'run_model_for_profilers.R'));
+#                                 run_model_for_cpp_profiler()"
 #
 # Every argument defaults to the environment variable run_fims_benchmark() sets,
 # so the launchers pass nothing. Interactively, point R at one build and call
@@ -69,27 +70,27 @@ run_model_for_cpp_profiler <- function(
 
   # FIMS is attached, not just loaded: its DESCRIPTION sets LazyData, so data
   # objects such as fims_input_types reach package code through the search path.
-  # Calling FIMS::FIMSFrame() without this fails with "object 'fims_input_types'
-  # not found" from inside the package.
   #
   # The branch of FIMS that is loaded is decided by R_LIBS, which specifies the
-  # location of where the branch-specific library is stored. The profiler wrapper
-  # then points to this location to load the correct library.
+  # location of where the branch-specific library is stored. The profiler
+  # wrapper then points to this location to load the correct library.
   # **Do not install a version of FIMS locally to the user or site library: a
-  # copy there is a silent fallback, so a half-finished install of a branch under
-  # test would silently fall back to the locally installed version therefore
-  # silently comparing the wrong branch.
+  # copy there is a silent fallback, so a half-finished install of a branch
+  # under test would silently fall back to the locally installed version
+  # therefore silently comparing the wrong branch.
   library(FIMS)
 
   n_eval <- max(suppressWarnings(as.integer(n_eval)), 1L, na.rm = TRUE)
   attach_delay <- suppressWarnings(as.numeric(attach_delay))
 
-  # A /proc/self/status field in kilobytes, or NA where there is no /proc (macOS).
+  # A /proc/self/status field in kilobytes, or NA where there is no /proc
+  # (macOS).
   proc_kb <- function(name) {
     if (!file.exists("/proc/self/status")) {
       return(NA_real_)
     }
-    line <- grep(paste0("^", name, ":"), readLines("/proc/self/status"), value = TRUE)
+    line <- grep(paste0("^", name, ":"), readLines("/proc/self/status"),
+                 value = TRUE)
     if (length(line)) as.numeric(gsub("[^0-9]", "", line[[1]])) else NA_real_
   }
 
@@ -115,7 +116,8 @@ run_model_for_cpp_profiler <- function(
   # high-water mark covers the whole process, so building the data could already
   # have set it higher than the stage ever reaches. Writing 5 to clear_refs
   # resets it to what the process holds now, so the peak read afterwards belongs
-  # to the stage. The whole-process peak is kept from before the reset. Linux only.
+  # to the stage. The whole-process peak is kept from before the reset.
+  # Linux only.
   peak_before_stage <- NA_real_
   rss_at_stage_start <- NA_real_
   if (record && file.exists("/proc/self/clear_refs")) {
@@ -150,7 +152,8 @@ run_model_for_cpp_profiler <- function(
     # run_benchmark.R wraps this run in /usr/bin/time instead.
     if (file.exists("/proc/self/status")) {
       peak_after <- proc_kb("VmHWM")
-      values$maximum_rss <- max(peak_before_stage, peak_after, na.rm = TRUE) * 1024
+      values$maximum_rss <- max(peak_before_stage, peak_after,
+                                na.rm = TRUE) * 1024
       if (!is.na(rss_at_stage_start)) {
         values$stage_rss_added <- max(peak_after - rss_at_stage_start, 0) * 1024
       }
@@ -185,21 +188,26 @@ run_model_for_cpp_profiler <- function(
 #' any of them.
 #'
 #' @param stage,size,backend As for setup_fims_model() and setup_fims_inputs().
-#' @param iterations Cycles in each loop; at least 3, so there is a slope to fit.
+#' @param iterations Cycles in each loop; at least 3 needed to fit a slope.
 #' @param out Where to write the tidy rows. Empty writes nothing, which is
 #'   convenient interactively.
 #' @param ref,version Labels for the rows.
 #' @param repo_root Repository root, for setup_FIMS.R and the memory helper.
 #' @return The tidy rows, invisibly.
-run_model_for_R_profiler <- function(stage = Sys.getenv("FIMS_STAGE", "initialize"),
+run_model_for_R_profiler <- function(stage = Sys.getenv("FIMS_STAGE",
+                                                        "initialize"),
                                      size = Sys.getenv("FIMS_SIZE", "normal"),
-                                     backend = Sys.getenv("FIMS_BACKEND", "TMB"),
+                                     backend = Sys.getenv("FIMS_BACKEND",
+                                                          "TMB"),
                                      teardown = Sys.getenv("TEARDOWN", "none"),
-                                     iterations = Sys.getenv("BENCH_ITERATIONS", "20"),
+                                     iterations = Sys.getenv("BENCH_ITERATIONS",
+                                                             "20"),
                                      out = Sys.getenv("BENCH_OUT"),
                                      ref = Sys.getenv("BENCH_REF"),
                                      version = Sys.getenv("BENCH_VERSION"),
-                                     repo_root = Sys.getenv("REPO_ROOT", getwd())) {
+                                     repo_root = Sys.getenv("REPO_ROOT",
+                                                            getwd()))
+{
   source(file.path(repo_root, "R", "setup_FIMS.R"))
   # Attached, not just loaded, and chosen by R_LIBS: see
   # run_model_for_cpp_profiler() above.
@@ -212,9 +220,11 @@ run_model_for_R_profiler <- function(stage = Sys.getenv("FIMS_STAGE", "initializ
   if (identical(Sys.info()[["sysname"]], "Linux")) {
     build <- file.path(tempdir(), "heap_in_use")
     dir.create(build, showWarnings = FALSE)
-    file.copy(file.path(repo_root, "scripts", "heap_in_use.c"), build, overwrite = TRUE)
+    file.copy(file.path(repo_root, "scripts", "heap_in_use.c"), build,
+              overwrite = TRUE)
     previous <- setwd(build)
-    status <- system2(file.path(R.home("bin"), "R"), c("CMD", "SHLIB", "heap_in_use.c"),
+    status <- system2(file.path(R.home("bin"), "R"), c("CMD", "SHLIB",
+                                                       "heap_in_use.c"),
       stdout = FALSE, stderr = FALSE
     )
     setwd(previous)
@@ -336,8 +346,12 @@ run_model_for_R_profiler <- function(stage = Sys.getenv("FIMS_STAGE", "initializ
     },
     row("median_time", "seconds", stats::median(times)),
     row("gc_per_cycle", "count", stats::median(collections)),
-    if (length(allocated) == 1L && is.finite(allocated)) row("mem_alloc", "bytes", allocated),
-    do.call(rbind, lapply(seq_along(times), function(i) row("time", "seconds", times[[i]], i)))
+    if (length(allocated) == 1L && is.finite(allocated)) {
+      row("mem_alloc", "bytes", allocated)
+    },
+    do.call(rbind, lapply(seq_along(times), function(i) {
+      row("time", "seconds", times[[i]], i)
+    }))
   )
   # "lifecycle" is what R/report.R looks for: the rows cover the memory loop as
   # well as bench::mark().

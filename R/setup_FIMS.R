@@ -158,8 +158,8 @@ setup_fims_inputs <- function(size = c("normal", "large")) {
 #'   "release" drops handles and runs the garbage collector.
 #' @param n_eval fn/gr evaluations at the "evaluate" rung.
 #' @param backend "TMB" or "quadra".
-#' @param record False by default. Results are only recorded in the reference run
-#' outside the R and C++ profiler runs.
+#' @param record False by default. Results are only recorded in the reference
+#' run outside the R and C++ profiler runs.
 #' @return A list of phase timings, results, and arguments used for the run.
 setup_fims_model <- function(input,
                              stage = c(
@@ -182,8 +182,8 @@ setup_fims_model <- function(input,
   # helper to stop at.
   if (backend == "quadra") {
     if (stage != "helper") {
-      stop("The quadra backend runs only at the \"helper\" stage, not '", stage, "'.",
-        call. = FALSE
+      stop("The quadra backend runs only at the \"helper\" stage, not '",
+        stage, "'.", call. = FALSE
       )
     }
     check_for_quadra()
@@ -212,7 +212,8 @@ setup_fims_model <- function(input,
       # Quadra builds no TMB object, so the estimates come back through the
       # FIMS interface and there is no gradient function to ask.
       if (backend == "quadra") {
-        result$final_parameters <- as.numeric(c(FIMS::get_fixed(), FIMS::get_random()))
+        result$final_parameters <- as.numeric(c(FIMS::get_fixed(),
+                                                FIMS::get_random()))
       } else {
         result$final_parameters <- as.numeric(fit@obj$env$last.par.best)
         result$final_gradient <- as.numeric(fit@obj$gr(fit@opt$par))
@@ -241,8 +242,8 @@ setup_fims_model <- function(input,
     FIMS::clear()
     mark("clear_entry")
 
-    # --- initialize: construction, and CreateTMBModel() inside initialize_fims(),
-    # which populates the derived quantities -------------------------------------
+    # --- initialize: construction, and CreateTMBModel() inside
+    # initialize_fims(), which populates the derived quantities
     init_parms <- FIMS::initialize_fims(input$parameters, data = input$data)
     mark("initialize")
     if (record) {
