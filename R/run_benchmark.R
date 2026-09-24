@@ -693,7 +693,8 @@ run_fims_benchmark <- function(ref_first = "main",
     if (capture) {
       # The wrapper prints one status word, but its diagnostics land in the same
       # captured stream, so match the word rather than trusting the last line.
-      states <- grep("^(captured|captured-export-failed|failed|unavailable|disabled)$",
+      states <- grep(paste0("^(captured|captured-export-",
+                            "failed|failed|unavailable|disabled)$"),
         result$output,
         value = TRUE
       )
@@ -892,8 +893,11 @@ run_fims_benchmark <- function(ref_first = "main",
       # cannot record; if it still records nothing here, every later run would
       # fail the same way, and finding out after the whole analysis wastes it.
       if (state %in% c("failed", "unavailable")) {
-        stop("CPU profile for '", ref, "' recorded nothing (", state, "). See ",
-          log_file, " and \"Fixing Valgrind and perf installation\" in README.md.",
+        stop(paste0("CPU profile for '", ref,
+                    "' recorded nothing (", state, "). See ",
+                    log_file,
+                    " and \"Fixing Valgrind and perf installation\" ",
+                    "in README.md."),
           call. = FALSE
         )
       }
@@ -1183,8 +1187,8 @@ run_fims_benchmark <- function(ref_first = "main",
   }
 
   manifest <- data.frame(
-    run_id = run_id, label = label, stage = stage, teardown = teardown, size = size,
-    backend = backend,
+    run_id = run_id, label = label, stage = stage, teardown = teardown,
+    size = size, backend = backend,
     ref_first = ref_first, ref_compare = paste(refs[-1], collapse = ","),
     profile = names(status), status = unname(status),
     timestamp = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),

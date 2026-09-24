@@ -201,7 +201,13 @@ lines <- c(
   paste0("Generated: `", format(Sys.time(), tz = "UTC", usetz = TRUE), "`"), "",
   sprintf(
     paste0(
-      "%d run%s comparing %s. Every measurement behind this report is in ",
+      "%d run%s comparing %s. ",
+       "Profile measurements were taken from the initialization step of the ",
+       "model run to the step indicated by `Stage`. `Backend` indicates ",
+       "whether the model was run by Quadra or TMB, `Size` indicates the ",
+       "number of years in the model, and `Teardown` refers to whether or not ",
+       " `clear` or `gc()` was run the end of the stage. Every measurement ",
+       "behind this report is in ",
       "`results.tsv`."
     ),
     nrow(runs), if (nrow(runs) == 1L) "" else "s",
@@ -314,7 +320,7 @@ if (has("reference", "maximum_rss")) {
     lines, "", "## Summary", "",
     paste0(
       "Maximum resident set size is the most memory the operating system saw ",
-      "each process hold, from the reference run: the stage once more on the ",
+      "each process hold, from the reference run: the stage run on the ",
       "optimized build, with no profiler attached. It includes R, its ",
       "packages and mapped code, so it is broader than the heap numbers ",
       "below."
@@ -326,8 +332,9 @@ if (has("reference", "maximum_rss")) {
 # What was fitted, taken from the runs rather than restated by hand, once per
 # size: the two sizes are different models with different parameter counts.
 counts <- measurements[measurements$source == "reference" &
-  measurements$metric %in% c("n_fixed", "n_random") &
-  !is.na(measurements$number) & measurements$number > 0, , drop = FALSE]
+                         measurements$metric %in% c("n_fixed", "n_random") &
+                         !is.na(measurements$number) & 
+                         measurements$number > 0, , drop = FALSE]
 if (nrow(counts)) {
   per_size <- vapply(unique(counts$size), function(size) {
     here <- counts[counts$size == size, , drop = FALSE]
@@ -344,16 +351,18 @@ if (nrow(counts)) {
       "A wrapper-built catch-at-age model with 12 ages and two fleets. ",
       "Observed components are fishing catch, survey index, age and length ",
       "compositions, weight at age, and the age-to-length conversion. The ",
-      "`large` inputs repeat the 30 years of `data_big` to reach its length, ",
-      "so it is the same information at greater scale rather than new ",
-      "observations. The random effects are one recruitment deviation per ",
-      "year after the first."
+      "`normal` size run has 30 years of data from `data_big`. The `large` ",
+      "size run repeats this 30 years of data 4 times, resulting in a 120 ",
+      "year time series, so it is the same information at greater scale ",
+      "rather than new observations. The random effects are parameterized as ",
+      "recruitment deviations."
     ),
     "", per_size
   )
 }
 
-measure <- function(source, metric, format_value = bytes, change = change_bytes) {
+measure <- function(source, metric, format_value = bytes,
+                    change = change_bytes) {
   values <- pick(source, metric)
   if (is.null(values)) {
     NULL
@@ -373,14 +382,19 @@ lifecycle <- c(
   gc_per_cycle = "Garbage collections per cycle"
 )
 if (any(measurements$source == "lifecycle")) {
-  header <- c("Run", "Metric", refs, if (length(refs) > 1L) paste("Change:", refs[-1L]))
+  header <- c("Run", "Metric", refs,
+              if (length(refs) > 1L) {
+                paste("Change:", refs[-1L])
+              })
   table <- c(
     paste0("| ", paste(header, collapse = " | "), " |"),
     paste0("|---|---|", paste(rep("---:|", length(header) - 2L), collapse = ""))
   )
   for (run in runs$run) {
     for (metric in names(lifecycle)) {
-      row <- vapply(refs, function(ref) number_of("lifecycle", metric, run, ref), numeric(1))
+      row <- vapply(refs, function(ref) {
+        number_of("lifecycle", metric, run, ref)
+      }, numeric(1))
       if (all(is.na(row))) next
       is_bytes <- metric %in% c(
         "heap_growth_per_cycle", "heap_after_first_cycle",
