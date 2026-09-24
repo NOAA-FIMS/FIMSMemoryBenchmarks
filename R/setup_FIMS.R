@@ -1,7 +1,9 @@
 check_for_quadra <- function() {
   if (!exists("quadra_fit")) {
-    stop("The current branch is not built to work with quadra. ",
-    "Please provide a branch where quandra is built into the backend.")
+    stop(
+      "The current branch is not built to work with quadra. ",
+      "Please provide a branch where quandra is built into the backend."
+    )
   }
 }
 
@@ -12,13 +14,18 @@ check_for_quadra <- function() {
 
 expand_fims_years <- function(dat, n_years) {
   base_years <- get_n_years(dat)
-  static <- dat |> get_data() |>
+  static <- dat |>
+    get_data() |>
     dplyr::filter(type == "age_to_length_conversion")
-  dynamic_types <- dat |> get_data() |>
+  dynamic_types <- dat |>
+    get_data() |>
     dplyr::filter(type != "age_to_length_conversion") |>
-    dplyr::pull(type) |> unique()
+    dplyr::pull(type) |>
+    unique()
   expanded <- lapply(dynamic_types, function(typename) {
-    source_dat <- dat |> get_data() |> dplyr::filter(type == typename)
+    source_dat <- dat |>
+      get_data() |>
+      dplyr::filter(type == typename)
     if (typename == "weight_at_age") {
       source_years <- base_years + 1L
       target_years <- n_years + 1L
@@ -38,9 +45,7 @@ expand_fims_years <- function(dat, n_years) {
   result
 }
 
-expand_fims_modules <- function(parameters, n_fleets, n_surveys) {
-
-}
+expand_fims_modules <- function(parameters, n_fleets, n_surveys) {}
 
 setup_fims_inputs <- function(size = c("normal", "large")) {
   size <- match.arg(size)
@@ -53,7 +58,8 @@ setup_fims_inputs <- function(size = c("normal", "large")) {
     data_4_model <- data_big |> FIMS::FIMSFrame()
     message(c("--> Inputs: ", size, " (30 years)"))
   } else {
-    data_4_model <- data_big |> FIMS::FIMSFrame() |> 
+    data_4_model <- data_big |>
+      FIMS::FIMSFrame() |>
       expand_fims_years(n_years = 120) |>
       FIMSFrame()
     message(c("--> Inputs: ", size, " (120 years)"))
@@ -102,7 +108,7 @@ setup_fims_inputs <- function(size = c("normal", "large")) {
       tibble::tibble(
         module_name = "Maturity",
         label = c("inflection_point", "slope"),
-        value = c(1,1)
+        value = c(1, 1)
       ),
       by = c("module_name", "label")
     ) |>
@@ -110,7 +116,7 @@ setup_fims_inputs <- function(size = c("normal", "large")) {
       tibble::tibble(
         label = "log_init_naa",
         age = seq(FIMS::get_n_ages(data_4_model)),
-        value = rep(0,12)
+        value = rep(0, 12)
       ),
       by = c("label", "age")
     )
@@ -151,13 +157,15 @@ setup_fims_inputs <- function(size = c("normal", "large")) {
 #' @param teardown "none" leaves the objects alive, "clear" calls FIMS::clear(),
 #'   "release" drops handles and runs the garbage collector.
 #' @param n_eval fn/gr evaluations at the "evaluate" rung.
-#' @param backend "TMB" or "quadra". 
+#' @param backend "TMB" or "quadra".
 #' @param record False by default. Results are only recorded in the reference run
 #' outside the R and C++ profiler runs.
 #' @return A list of phase timings, results, and arguments used for the run.
 setup_fims_model <- function(input,
-                             stage = c("initialize", "tape", "evaluate",
-                                        "optimize", "sdreport", "helper"),
+                             stage = c(
+                               "initialize", "tape", "evaluate",
+                               "optimize", "sdreport", "helper"
+                             ),
                              teardown = c("none", "clear", "release"),
                              n_eval = 1L,
                              backend = c("TMB", "quadra"),
@@ -175,7 +183,8 @@ setup_fims_model <- function(input,
   if (backend == "quadra") {
     if (stage != "helper") {
       stop("The quadra backend runs only at the \"helper\" stage, not '", stage, "'.",
-           call. = FALSE)
+        call. = FALSE
+      )
     }
     check_for_quadra()
   }
@@ -184,17 +193,22 @@ setup_fims_model <- function(input,
     FIMS::clear()
     mark("clear_entry")
     init_parms <- FIMS::initialize_fims(
-      input$parameters, data = input$data
+      input$parameters,
+      data = input$data
     )
     mark("initialize")
-    fit <- FIMS::fit_fims(init_parms, optimize = TRUE,
-                          backend = backend)
+    fit <- FIMS::fit_fims(init_parms,
+      optimize = TRUE,
+      backend = backend
+    )
     mark("sdreport")
     if (record) {
       result$initial_parameters <- init_parms$parameters
       result$n_fixed <- init_parms$parameters$p |> length()
       result$n_random <- init_parms$parameters$re |> length()
-      result$n_par <- init_parms$parameters |> unlist() |> length()
+      result$n_par <- init_parms$parameters |>
+        unlist() |>
+        length()
       # Quadra builds no TMB object, so the estimates come back through the
       # FIMS interface and there is no gradient function to ask.
       if (backend == "quadra") {
@@ -217,10 +231,11 @@ setup_fims_model <- function(input,
         result$report <- summary(fit@sdreport, "report")
       }
     }
-
   } else {
-    ladder <- c("initialize", "tape", "evaluate",
-                "optimize", "sdreport")
+    ladder <- c(
+      "initialize", "tape", "evaluate",
+      "optimize", "sdreport"
+    )
     target <- match(stage, ladder)
 
     FIMS::clear()
@@ -234,12 +249,14 @@ setup_fims_model <- function(input,
       result$initial_parameters <- init_parms$parameters
       result$n_fixed <- init_parms$parameters$p |> length()
       result$n_random <- init_parms$parameters$re |> length()
-      result$n_par <- init_parms$parameters |> unlist() |> length()
+      result$n_par <- init_parms$parameters |>
+        unlist() |>
+        length()
     }
 
     obj <- NULL
 
-    # --- tape: 
+    # --- tape:
     if (target >= 2L) {
       obj <- TMB::MakeADFun(
         data = list(), parameters = init_parms$parameters,
@@ -276,11 +293,11 @@ setup_fims_model <- function(input,
     }
 
     if (target >= 4L) {
-      opt <- nlminb( obj$par, obj$fn, obj$gr,
+      opt <- nlminb(obj$par, obj$fn, obj$gr,
         control = list(eval.max = 10000, iter.max = 10000, trace = 0)
       )
       mark("optimize")
-      if (record) { 
+      if (record) {
         result$final_parameters <- as.numeric(obj$env$last.par.best)
         result$final_objective <- as.numeric(opt$objective)
         result$final_gradient <- as.numeric(obj$gr(opt$par))
@@ -308,17 +325,28 @@ setup_fims_model <- function(input,
   # collection runs the finalizers of any external pointers, and the memory they
   # hand back only shows up in the second.
   switch(teardown,
-    clear   = { FIMS::clear(); mark("teardown") },
-    release = { obj <- NULL; init_parms <- NULL; gc(); gc(); mark("teardown") },
-    none    = invisible(NULL)
+    clear = {
+      FIMS::clear()
+      mark("teardown")
+    },
+    release = {
+      obj <- NULL
+      init_parms <- NULL
+      gc()
+      gc()
+      mark("teardown")
+    },
+    none = invisible(NULL)
   )
 
   structure(
-    list(result = result,
-         phases = diff(marks),
-         stage = stage,
-         backend = backend,
-         teardown = teardown),
+    list(
+      result = result,
+      phases = diff(marks),
+      stage = stage,
+      backend = backend,
+      teardown = teardown
+    ),
     class = "fims_stage_result"
   )
 }
@@ -374,12 +402,10 @@ install_fims <- function(ref = "main") {
   )
   if (is.na(version)) {
     stop("Installing FIMS@", ref, " into ", target,
-         " did not produce an installed package; see the log above.",
-         call. = FALSE)
+      " did not produce an installed package; see the log above.",
+      call. = FALSE
+    )
   }
   message("Installed FIMS ", version, " into ", target)
   invisible(version)
 }
-
-
-

@@ -16,14 +16,14 @@
 # Branches the rows with backend "TMB" compare. Every ref is measured against
 # the baseline, and ref_compare takes any number of them, so adding a third
 # branch is one more entry rather than another pass.
-ref_first <- "8bdd020"                          # baseline
+ref_first <- "8bdd020" # baseline
 ref_compare <- c("update-R-with-XPtr-interface", "remove-direct-rcpp-main")
 
 # Quadra is a special case and comparisons require a FIMS branch with quadra
-# implemented. Setting the two refs bellow to `NULL` will skip the four "quadra-" 
+# implemented. Setting the two refs bellow to `NULL` will skip the four "quadra-"
 # rows. Both branches must implement Quadra as the backend, a build that does not
 # have it will fail the run.
-ref_first_quadra <- NULL                        # baseline; NULL skips the rows
+ref_first_quadra <- NULL # baseline; NULL skips the rows
 ref_compare_quadra <- NULL
 
 # Cycles in each back-to-back loop: the stage built and cleared this many times
@@ -51,17 +51,17 @@ source(file.path(repo_root, "R", "run_benchmark.R"))
 # "sdreport" includes optimize. The cost of sdreport alone is the difference
 # between those two rows -- which is why both are here rather than sdreport
 # only.
-# 
-# size differentiates between the base default model (n = 30) in FIMS and 
-# an artifically enlarged population created by repeating the default dataset 
-# four times (n = 120)  
+#
+# size differentiates between the base default model (n = 30) in FIMS and
+# an artifically enlarged population created by repeating the default dataset
+# four times (n = 120)
 #
 # teardown rows answer a different question: whether what initialize retained
 # is actually released, by clear() or by dropping handles and letting the GC
 # run. Those only make sense where there is something retained to release.
 
 #' Model run names: [quadra-]<stage>-<size>[-<teardown>]
-#' Labels starting without `quadra-` run TMB by default 
+#' Labels starting without `quadra-` run TMB by default
 #' A label that does not parse correctly will stop the script
 labels <- c(
   "initialize-normal",
@@ -89,16 +89,23 @@ parse_label <- function(label) {
   teardown <- if (length(word) > 2L) word[[3]] else "none"
   wrong <- c(
     if (length(word) > 3L) "too many parts",
-    if (!stage %in% c("initialize", "tape", "evaluate", "optimize",
-                      "sdreport", "helper")) paste0("unknown stage '", stage, "'"),
+    if (!stage %in% c(
+      "initialize", "tape", "evaluate", "optimize",
+      "sdreport", "helper"
+    )) {
+      paste0("unknown stage '", stage, "'")
+    },
     if (!size %in% c("normal", "large")) paste0("unknown size '", size, "'"),
     if (!teardown %in% c("none", "clear", "release")) paste0("unknown teardown '", teardown, "'"),
-    if (identical(backend, "quadra") && !identical(stage, "helper"))
+    if (identical(backend, "quadra") && !identical(stage, "helper")) {
       "quadra runs only at the helper stage"
+    }
   )
   if (length(wrong)) {
     stop("Cannot read the run '", label, "': ", paste(wrong, collapse = "; "),
-         ". Expected [quadra-]<stage>-<size>[-<teardown>].", call. = FALSE)
+      ". Expected [quadra-]<stage>-<size>[-<teardown>].",
+      call. = FALSE
+    )
   }
   c(stage = stage, size = size, teardown = teardown, backend = backend)
 }
@@ -129,8 +136,10 @@ runs$heavy <- runs$stage == "sdreport" |
 # run rather than something to run badly.
 if (is.null(ref_first_quadra) || is.null(ref_compare_quadra)) {
   if (any(runs$backend == "quadra")) {
-    message("No Quadra branches set, so the quadra rows are skipped. ",
-            "Set ref_first_quadra and ref_compare_quadra to include them.")
+    message(
+      "No Quadra branches set, so the quadra rows are skipped. ",
+      "Set ref_first_quadra and ref_compare_quadra to include them."
+    )
   }
   runs <- runs[runs$backend != "quadra", , drop = FALSE]
 }
@@ -153,8 +162,10 @@ if (!is.null(only)) {
   partners <- setdiff(sub("-(clear|release)$", "", runs$label[chosen]), only)
   partners <- intersect(partners, runs$label)
   if (length(partners)) {
-    message("Also running ", paste(partners, collapse = ", "),
-            ": teardown runs are compared with the same stage and size without teardown.")
+    message(
+      "Also running ", paste(partners, collapse = ", "),
+      ": teardown runs are compared with the same stage and size without teardown."
+    )
   }
   runs <- runs[runs$label %in% c(only, partners), , drop = FALSE]
 }
@@ -167,7 +178,8 @@ if (!nrow(runs)) stop("No runs selected.", call. = FALSE)
 for (pkg in c("bench", "remotes")) {
   if (!requireNamespace(pkg, quietly = TRUE)) {
     stop("The '", pkg, "' package is required: install.packages('", pkg, "').",
-         call. = FALSE)
+      call. = FALSE
+    )
   }
 }
 
@@ -193,7 +205,9 @@ if (any(grepl("cpu", runs$profiles))) {
   if (identical(host, "Darwin")) {
     if (!nzchar(Sys.which("xctrace"))) {
       stop("xctrace was not found, so no CPU profile can be recorded. Install ",
-           "Xcode, or remove cpu from the runs.", call. = FALSE)
+        "Xcode, or remove cpu from the runs.",
+        call. = FALSE
+      )
     }
   } else {
     event <- test_perf_works()
@@ -215,7 +229,8 @@ if (any(grepl("leaks", runs$profiles))) {
   if (!nzchar(Sys.which(detector))) {
     # Fail fast: without the detector every leak check fails the same way.
     stop(detector, " is required for leak checks on ", host, ". ", FIX_PROFILERS,
-         call. = FALSE)
+      call. = FALSE
+    )
   }
 }
 
@@ -231,11 +246,13 @@ results <- data.frame(
 
 for (index in seq_len(nrow(runs))) {
   row <- runs[index, ]
-  message("\n=== [", index, "/", nrow(runs), "] ", row$label,
-          " | ", row$ref_first, " vs ", paste(row$ref_compare[[1]], collapse = ", "),
-          " | stage=", row$stage, " size=", row$size,
-          " backend=", row$backend, " teardown=", row$teardown,
-          " profiles=", row$profiles, " ===")
+  message(
+    "\n=== [", index, "/", nrow(runs), "] ", row$label,
+    " | ", row$ref_first, " vs ", paste(row$ref_compare[[1]], collapse = ", "),
+    " | stage=", row$stage, " size=", row$size,
+    " backend=", row$backend, " teardown=", row$teardown,
+    " profiles=", row$profiles, " ==="
+  )
 
   started <- Sys.time()
   outcome <- tryCatch(
@@ -254,7 +271,8 @@ for (index in seq_len(nrow(runs))) {
   )
 
   results$minutes[index] <- round(
-    as.numeric(difftime(Sys.time(), started, units = "mins")), 1)
+    as.numeric(difftime(Sys.time(), started, units = "mins")), 1
+  )
 
   if (inherits(outcome, "benchmark_failure")) {
     results$status[index] <- "failed"
@@ -270,16 +288,22 @@ for (index in seq_len(nrow(runs))) {
 # wrote. Sections appear only where the runs produced the measurement, so an
 # analysis of "initialize" alone reports memory and says nothing about a fit.
 
-index_file <- file.path(repo_root, "outputs",
-                        paste0(format(Sys.time(), "%Y%m%d"), "_analysis_index.tsv"))
+index_file <- file.path(
+  repo_root, "outputs",
+  paste0(format(Sys.time(), "%Y%m%d"), "_analysis_index.tsv")
+)
 utils::write.table(results, index_file, sep = "\t", row.names = FALSE, quote = FALSE)
 
-report_file <- file.path(repo_root, "outputs",
-                         paste0(format(Sys.time(), "%Y%m%d"), "_report.md"))
+report_file <- file.path(
+  repo_root, "outputs",
+  paste0(format(Sys.time(), "%Y%m%d"), "_report.md")
+)
 completed <- results$output_dir[results$status == "ok"]
 if (length(completed)) {
-  system2("Rscript", c(shQuote(file.path(repo_root, "R", "report.R")),
-                       shQuote(report_file), shQuote(completed)))
+  system2("Rscript", c(
+    shQuote(file.path(repo_root, "R", "report.R")),
+    shQuote(report_file), shQuote(completed)
+  ))
 }
 
 message("\n=== analysis complete ===")
@@ -288,6 +312,8 @@ message("Index: ", index_file)
 
 failed <- results$label[results$status == "failed"]
 if (length(failed)) {
-  message("Failed rows: ", paste(failed, collapse = ", "),
-          " -- see run.log in each run directory.")
+  message(
+    "Failed rows: ", paste(failed, collapse = ", "),
+    " -- see run.log in each run directory."
+  )
 }

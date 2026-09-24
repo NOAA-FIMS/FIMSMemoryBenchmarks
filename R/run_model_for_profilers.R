@@ -54,16 +54,17 @@
 #' @param repo_root Repository root, for setup_FIMS.R.
 #' @return The setup_fims_model() result, invisibly; NULL for the baseline run.
 run_model_for_cpp_profiler <- function(
-    stage = Sys.getenv("FIMS_STAGE", "initialize"),
-    size = Sys.getenv("FIMS_SIZE", "normal"),
-    backend = Sys.getenv("FIMS_BACKEND", "TMB"),
-    teardown = Sys.getenv("TEARDOWN", "none"),
-    n_eval = Sys.getenv("FIMS_N_EVAL", "1"),
-    values_out = Sys.getenv("VALUES_OUT"),
-    stage_mode = Sys.getenv("STAGE_MODE", "stage"),
-    attach_delay = Sys.getenv("STAGE_ATTACH_DELAY", "0"),
-    leak_marker = Sys.getenv("FIMS_LEAK_COMPLETED"),
-    repo_root = Sys.getenv("REPO_ROOT", getwd())) {
+  stage = Sys.getenv("FIMS_STAGE", "initialize"),
+  size = Sys.getenv("FIMS_SIZE", "normal"),
+  backend = Sys.getenv("FIMS_BACKEND", "TMB"),
+  teardown = Sys.getenv("TEARDOWN", "none"),
+  n_eval = Sys.getenv("FIMS_N_EVAL", "1"),
+  values_out = Sys.getenv("VALUES_OUT"),
+  stage_mode = Sys.getenv("STAGE_MODE", "stage"),
+  attach_delay = Sys.getenv("STAGE_ATTACH_DELAY", "0"),
+  leak_marker = Sys.getenv("FIMS_LEAK_COMPLETED"),
+  repo_root = Sys.getenv("REPO_ROOT", getwd())
+) {
   source(file.path(repo_root, "R", "setup_FIMS.R"))
 
   # FIMS is attached, not just loaded: its DESCRIPTION sets LazyData, so data
@@ -85,7 +86,9 @@ run_model_for_cpp_profiler <- function(
 
   # A /proc/self/status field in kilobytes, or NA where there is no /proc (macOS).
   proc_kb <- function(name) {
-    if (!file.exists("/proc/self/status")) return(NA_real_)
+    if (!file.exists("/proc/self/status")) {
+      return(NA_real_)
+    }
     line <- grep(paste0("^", name, ":"), readLines("/proc/self/status"), value = TRUE)
     if (length(line)) as.numeric(gsub("[^0-9]", "", line[[1]])) else NA_real_
   }
@@ -118,13 +121,21 @@ run_model_for_cpp_profiler <- function(
   if (record && file.exists("/proc/self/clear_refs")) {
     invisible(gc())
     peak_before_stage <- proc_kb("VmHWM")
-    reset <- tryCatch({ writeLines("5", "/proc/self/clear_refs"); TRUE },
-                      error = function(e) FALSE, warning = function(w) FALSE)
+    reset <- tryCatch(
+      {
+        writeLines("5", "/proc/self/clear_refs")
+        TRUE
+      },
+      error = function(e) FALSE,
+      warning = function(w) FALSE
+    )
     if (isTRUE(reset)) rss_at_stage_start <- proc_kb("VmRSS")
   }
 
-  result <- setup_fims_model(inputs, stage = stage, teardown = teardown,
-                             n_eval = n_eval, backend = backend, record = record)
+  result <- setup_fims_model(inputs,
+    stage = stage, teardown = teardown,
+    n_eval = n_eval, backend = backend, record = record
+  )
 
   # What the run computed, saved whole because the reports read the structure
   # rather than a summary.
@@ -204,7 +215,8 @@ run_model_for_R_profiler <- function(stage = Sys.getenv("FIMS_STAGE", "initializ
     file.copy(file.path(repo_root, "scripts", "heap_in_use.c"), build, overwrite = TRUE)
     previous <- setwd(build)
     status <- system2(file.path(R.home("bin"), "R"), c("CMD", "SHLIB", "heap_in_use.c"),
-                      stdout = FALSE, stderr = FALSE)
+      stdout = FALSE, stderr = FALSE
+    )
     setwd(previous)
     helper <- file.path(build, paste0("heap_in_use", .Platform$dynlib.ext))
     if (identical(as.integer(status), 0L) && file.exists(helper)) {
@@ -212,7 +224,8 @@ run_model_for_R_profiler <- function(stage = Sys.getenv("FIMS_STAGE", "initializ
       heap_in_use <- function() .Call("heap_in_use")
     } else {
       warning("Could not compile the memory helper, so memory growth is not measured.",
-              call. = FALSE)
+        call. = FALSE
+      )
     }
   }
 
@@ -228,8 +241,10 @@ run_model_for_R_profiler <- function(stage = Sys.getenv("FIMS_STAGE", "initializ
   # reading is taken, which shows in the level, not the slope. The slope is the
   # leak, and it is a leak under any teardown.
   cycle <- function() {
-    invisible(setup_fims_model(inputs, stage = stage, teardown = teardown,
-                               backend = backend))
+    invisible(setup_fims_model(inputs,
+      stage = stage, teardown = teardown,
+      backend = backend
+    ))
   }
 
   # --- 1. does memory accumulate? -------------------------------------------
@@ -282,8 +297,10 @@ run_model_for_R_profiler <- function(stage = Sys.getenv("FIMS_STAGE", "initializ
   # filter_gc = FALSE keeps every iteration: garbage collection is part of what
   # the stage costs, and dropping those iterations would flatter it.
   timing <- suppressWarnings(bench::mark(
-    cycle(), iterations = iterations, check = FALSE, filter_gc = FALSE,
-    time_unit = "s", memory = isTRUE(unname(capabilities("profmem")))))
+    cycle(),
+    iterations = iterations, check = FALSE, filter_gc = FALSE,
+    time_unit = "s", memory = isTRUE(unname(capabilities("profmem")))
+  ))
   times <- as.numeric(timing$time[[1]])
   collections <- rowSums(as.data.frame(timing$gc[[1]]))
   allocated <- as.numeric(timing$mem_alloc)
@@ -297,22 +314,26 @@ run_model_for_R_profiler <- function(stage = Sys.getenv("FIMS_STAGE", "initializ
     }
   }
   row <- function(metric, unit, value, iteration = "") {
-    data.frame(metric = metric, unit = unit, value = as_text(value),
-               iteration = as.character(iteration), stringsAsFactors = FALSE)
+    data.frame(
+      metric = metric, unit = unit, value = as_text(value),
+      iteration = as.character(iteration), stringsAsFactors = FALSE
+    )
   }
   rows <- rbind(
     row("cycles", "count", iterations),
-    if (!is.null(heap_in_use)) rbind(
-      row("heap_growth_per_cycle", "bytes", growth),
-      row("heap_growth_spread", "bytes", spread),
-      row("heap_growth_r_squared", "fraction", r_squared),
-      row("heap_growth_endpoint", "bytes", endpoint_growth),
-      row("heap_after_first_cycle", "bytes", in_use[[1L]]),
-      row("heap_after_last_cycle", "bytes", in_use[[iterations]]),
-      do.call(rbind, lapply(seq_len(iterations), function(i) {
-        row("heap_after_cycle", "bytes", in_use[[i]], i)
-      }))
-    ),
+    if (!is.null(heap_in_use)) {
+      rbind(
+        row("heap_growth_per_cycle", "bytes", growth),
+        row("heap_growth_spread", "bytes", spread),
+        row("heap_growth_r_squared", "fraction", r_squared),
+        row("heap_growth_endpoint", "bytes", endpoint_growth),
+        row("heap_after_first_cycle", "bytes", in_use[[1L]]),
+        row("heap_after_last_cycle", "bytes", in_use[[iterations]]),
+        do.call(rbind, lapply(seq_len(iterations), function(i) {
+          row("heap_after_cycle", "bytes", in_use[[i]], i)
+        }))
+      )
+    },
     row("median_time", "seconds", stats::median(times)),
     row("gc_per_cycle", "count", stats::median(collections)),
     if (length(allocated) == 1L && is.finite(allocated)) row("mem_alloc", "bytes", allocated),
@@ -324,7 +345,8 @@ run_model_for_R_profiler <- function(stage = Sys.getenv("FIMS_STAGE", "initializ
     ref = ref, fims_version = version,
     stage = "", backend = "", teardown = "", size = "", round = "",
     iteration = rows$iteration, source = "lifecycle", metric = rows$metric,
-    unit = rows$unit, value = rows$value, path = "", stringsAsFactors = FALSE)
+    unit = rows$unit, value = rows$value, path = "", stringsAsFactors = FALSE
+  )
   if (nzchar(out)) {
     utils::write.table(rows, out, sep = "\t", row.names = FALSE, quote = FALSE)
     message("--> ", iterations, " back-to-back cycles written to ", out)
